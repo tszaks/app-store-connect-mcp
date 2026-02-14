@@ -70,6 +70,9 @@ node dist/index.js
 - `asc_list_in_app_purchases`
 - `asc_get_in_app_purchase`
 - `asc_list_subscription_groups`
+- `asc_list_subscriptions`
+- `asc_get_subscription`
+- `asc_list_introductory_offers`
 - `asc_list_devices`
 - `asc_register_device` (gated)
 - `asc_list_profiles`

@@ -731,6 +731,65 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
     },
   });
 
+  tools.push({
+    name: 'asc_list_subscriptions',
+    description: 'List subscriptions in a subscription group.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        subscription_group_id: { type: 'string' },
+        limit: { type: 'number' },
+        include: { type: 'string' },
+        sort: { type: 'string' },
+      },
+      required: ['subscription_group_id'],
+    },
+    handler: async (args) => {
+      const groupId = requireString(args.subscription_group_id, 'subscription_group_id');
+      const query: any = { ...args };
+      delete query.subscription_group_id;
+      const res = await asc.request({ method: 'GET', path: `/subscriptionGroups/${groupId}/subscriptions`, query });
+      return JSON.stringify(res.json, null, 2);
+    },
+  });
+
+  tools.push({
+    name: 'asc_get_subscription',
+    description: 'Get a subscription by id.',
+    inputSchema: {
+      type: 'object',
+      properties: { subscription_id: { type: 'string' } },
+      required: ['subscription_id'],
+    },
+    handler: async (args) => {
+      const id = requireString(args.subscription_id, 'subscription_id');
+      const res = await asc.request({ method: 'GET', path: `/subscriptions/${id}` });
+      return JSON.stringify(res.json, null, 2);
+    },
+  });
+
+  tools.push({
+    name: 'asc_list_introductory_offers',
+    description: 'List introductory offers (including free trials) for a subscription.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        subscription_id: { type: 'string' },
+        limit: { type: 'number' },
+        include: { type: 'string' },
+        sort: { type: 'string' },
+      },
+      required: ['subscription_id'],
+    },
+    handler: async (args) => {
+      const id = requireString(args.subscription_id, 'subscription_id');
+      const query: any = { ...args };
+      delete query.subscription_id;
+      const res = await asc.request({ method: 'GET', path: `/subscriptions/${id}/introductoryOffers`, query });
+      return JSON.stringify(res.json, null, 2);
+    },
+  });
+
   // -----------------------
   // Devices / Profiles (common provisioning reads + device registration)
   // -----------------------
