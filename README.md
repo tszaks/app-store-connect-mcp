@@ -78,3 +78,38 @@ node dist/index.js
 - `asc_list_profiles`
 
 More can be added quickly via `asc_request` or by extending `src/tools/`.
+
+## Quickstart TL;DR
+
+```bash
+npm install
+npm run build
+ASC_ISSUER_ID='...' ASC_KEY_ID='...' ASC_PRIVATE_KEY='...' node dist/index.js
+```
+
+## How It Works (TL;DR)
+
+- MCP tools map to App Store Connect REST endpoints
+- Server signs JWT with your `.p8` key and calls ASC APIs
+- Write operations are safety-gated (`confirm: true`, non-empty `reason`)
+
+## LLM Quick Copy
+
+Use the copy button on this code block in GitHub.
+
+```txt
+Repo: app-store-connect-mcp
+Goal: App Store Connect MCP server with broad API coverage.
+Setup:
+1) npm install
+2) npm run build
+3) Set ASC_ISSUER_ID, ASC_KEY_ID, ASC_PRIVATE_KEY
+4) Run node dist/index.js and add to MCP client config
+Use:
+- Read: asc_list_apps, asc_list_builds, asc_list_beta_groups, asc_list_review_submissions
+- Write (gated): asc_create_*, asc_update_*, asc_submit_review_submission
+How it works:
+- Node MCP server -> JWT auth -> App Store Connect API
+Safety:
+- POST/PATCH/DELETE require confirm=true and reason
+```
