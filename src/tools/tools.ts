@@ -113,6 +113,7 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
       const response = await asc.requestText({
         method: 'GET',
         path: '/financeReports',
+        accept: 'application/a-gzip',
         query: {
           'filter[vendorNumber]': vendorNumber,
           'filter[reportDate]': reportDate,
