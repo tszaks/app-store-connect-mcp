@@ -41,6 +41,7 @@ node dist/index.js
 
 - `asc_ping`
 - `asc_request`
+- `asc_download_finance_report`
 - `asc_list_apps`
 - `asc_get_app`
 - `asc_list_app_store_versions`
@@ -78,7 +79,6 @@ node dist/index.js
 - `asc_list_profiles`
 
 More can be added quickly via `asc_request` or by extending `src/tools/`.
-
 ## Quickstart TL;DR
 
 ```bash
@@ -113,3 +113,26 @@ How it works:
 Safety:
 - POST/PATCH/DELETE require confirm=true and reason
 ```
+
+## Finance Reports
+
+`asc_download_finance_report` downloads the Apple finance report file from `/v1/financeReports`, automatically expands gzip-compressed responses, and returns either:
+
+- a preview (default, first 40 lines)
+- or the full report text with `full_report: true`
+
+Example:
+
+```json
+{
+  "vendor_number": "93635270",
+  "report_date": "2026-03",
+  "report_type": "FINANCIAL",
+  "region_code": "ZZ"
+}
+```
+
+Notes:
+- `region_code` defaults to `ZZ` for all countries or regions
+- `report_type` is passed through as-is so you can use the exact Apple value you need, such as `FINANCIAL` or `FINANCE_DETAIL`
+- Apple requires the App Store Connect API key user to have `Account Holder`, `Admin`, or `Finance` access for finance reports
