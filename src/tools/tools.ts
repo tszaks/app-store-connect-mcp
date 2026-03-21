@@ -11,6 +11,21 @@ function requirePathUnderV1(path: string): string {
   return p.replace(/^\/v1/, ''); // our http client baseUrl includes /v1
 }
 
+function optionalNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function splitReportLines(text: string): string[] {
+  if (!text) return [];
+  const normalized = text.replace(/\r\n/g, '\n');
+  const trimmed = normalized.endsWith('\n') ? normalized.slice(0, -1) : normalized;
+  return trimmed ? trimmed.split('\n') : [];
+}
+
 export function buildTools(asc: AscHttpClient): ToolDef[] {
   const tools: ToolDef[] = [];
 
@@ -52,6 +67,82 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
       const body = args.body && typeof args.body === 'object' ? (args.body as any) : undefined;
       const res = await asc.request({ method, path, query, body });
       return JSON.stringify(res.json, null, 2);
+    },
+  });
+
+  tools.push({
+    name: 'asc_download_finance_report',
+    description:
+      'Download an App Store Connect finance report and return a preview or full text. Requires Account Holder, Admin, or Finance access in App Store Connect.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        vendor_number: { type: 'string', description: 'Your App Store Connect vendor number.' },
+        report_date: {
+          type: 'string',
+          description: "Apple fiscal reporting period, typically 'YYYY-MM'.",
+        },
+        report_type: {
+          type: 'string',
+          description:
+            "Apple finance report type, for example 'FINANCIAL' or 'FINANCE_DETAIL'.",
+        },
+        region_code: {
+          type: 'string',
+          description: "Region filter. Defaults to 'ZZ' for all countries/regions.",
+        },
+        full_report: {
+          type: 'boolean',
+          description: 'When true, return the full report text instead of only a preview.',
+        },
+        line_limit: {
+          type: 'number',
+          description: 'Preview line count when full_report is false. Defaults to 40.',
+        },
+      },
+      required: ['vendor_number', 'report_date', 'report_type'],
+    },
+    handler: async (args) => {
+      const vendorNumber = requireString(args.vendor_number, 'vendor_number');
+      const reportDate = requireString(args.report_date, 'report_date');
+      const reportType = requireString(args.report_type, 'report_type');
+      const regionCode = optionalString(args.region_code) ?? 'ZZ';
+      const fullReport = Boolean(args.full_report);
+      const lineLimit = clamp(optionalNumber(args.line_limit) ?? 40, 1, 500);
+
+      const response = await asc.requestText({
+        method: 'GET',
+        path: '/financeReports',
+        query: {
+          'filter[vendorNumber]': vendorNumber,
+          'filter[reportDate]': reportDate,
+          'filter[reportType]': reportType,
+          'filter[regionCode]': regionCode,
+        },
+      });
+
+      const lines = splitReportLines(response.text);
+      const previewText = lines.slice(0, lineLimit).join('\n');
+      const fileNameMatch = /filename="?([^"]+)"?/i.exec(response.headers['content-disposition'] ?? '');
+
+      return JSON.stringify(
+        {
+          vendor_number: vendorNumber,
+          report_date: reportDate,
+          report_type: reportType,
+          region_code: regionCode,
+          file_name: fileNameMatch?.[1] ?? null,
+          content_type: response.headers['content-type'] ?? null,
+          is_compressed: response.isCompressed,
+          line_count: lines.length,
+          preview_line_count: Math.min(lineLimit, lines.length),
+          preview_text: previewText,
+          report_text: fullReport ? response.text : undefined,
+          report_text_included: fullReport,
+        },
+        null,
+        2,
+      );
     },
   });
 

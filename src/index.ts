@@ -47,7 +47,7 @@ const asc = new AscHttpClient({
 const toolDefs = buildTools(asc);
 
 const server = new Server(
-  { name: 'app-store-connect-mcp', version: '0.1.0' },
+  { name: 'app-store-connect-mcp', version: '0.2.0' },
   { capabilities: { tools: {} } },
 );
 
@@ -83,4 +83,3 @@ main().catch((e) => {
   console.error(e);
   process.exit(1);
 });
-
