@@ -56,6 +56,7 @@ export class AscHttpClient {
     path: string; // must start with '/'
     query?: Record<string, unknown>;
     body?: Json;
+    accept?: string;
   }): Promise<{ status: number; headers: Record<string, string>; json: Json }> {
     const raw = await this.requestBuffer(args);
     const text = raw.body.toString('utf8');
@@ -68,6 +69,7 @@ export class AscHttpClient {
     path: string; // must start with '/'
     query?: Record<string, unknown>;
     body?: Json;
+    accept?: string;
   }): Promise<{ status: number; headers: Record<string, string>; text: string; isCompressed: boolean }> {
     const raw = await this.requestBuffer(args);
     return {
@@ -83,6 +85,7 @@ export class AscHttpClient {
     path: string; // must start with '/'
     query?: Record<string, unknown>;
     body?: Json;
+    accept?: string;
   }): Promise<{ status: number; headers: Record<string, string>; body: Buffer; isCompressed: boolean }> {
     const baseUrl = this.config.baseUrl.replace(/\/+$/, '');
     const path = args.path.startsWith('/') ? args.path : `/${args.path}`;
@@ -91,7 +94,7 @@ export class AscHttpClient {
     const token = await this.config.getToken();
     const headers: Record<string, string> = {
       Authorization: `Bearer ${token}`,
-      Accept: 'application/json',
+      Accept: args.accept ?? 'application/json',
     };
     let body: string | undefined;
     if (args.body !== undefined) {
