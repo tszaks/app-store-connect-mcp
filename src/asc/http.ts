@@ -80,6 +80,38 @@ export class AscHttpClient {
     };
   }
 
+  async downloadUrlText(
+    url: string,
+  ): Promise<{ status: number; headers: Record<string, string>; text: string; isCompressed: boolean }> {
+    const res = await this.fetchWithRetry(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/a-gzip',
+      },
+    });
+
+    const bytes = Buffer.from(await res.arrayBuffer());
+    const outHeaders: Record<string, string> = {};
+    res.headers.forEach((v, k) => (outHeaders[k] = v));
+
+    if (!res.ok) {
+      const text = bytes.toString('utf8');
+      const json = text ? safeJsonParse(text) : null;
+      const msg = (json && (json.errors?.[0]?.detail || json.errors?.[0]?.title)) || res.statusText;
+      throw new Error(`ASC signed URL HTTP ${res.status}: ${msg}`);
+    }
+
+    const isCompressed = looksLikeGzip(bytes) || headerHintsGzip(outHeaders);
+    const bodyBuffer = looksLikeGzip(bytes) ? gunzipSync(bytes) : bytes;
+
+    return {
+      status: res.status,
+      headers: outHeaders,
+      text: bodyBuffer.toString('utf8'),
+      isCompressed,
+    };
+  }
+
   private async requestBuffer(args: {
     method: string;
     path: string; // must start with '/'
