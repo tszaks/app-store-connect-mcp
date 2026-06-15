@@ -21,7 +21,7 @@ npm run build
 Required:
 - `ASC_ISSUER_ID`
 - `ASC_KEY_ID`
-- `ASC_PRIVATE_KEY` (the `.p8` contents; supports `\\n`-escaped newlines)
+- `ASC_PRIVATE_KEY` (the `.p8` contents; supports `\\n`-escaped newlines) or `ASC_PRIVATE_KEY_FILE`
 
 Optional:
 - `ASC_BASE_URL` (default `https://api.appstoreconnect.apple.com/v1`)
@@ -42,6 +42,12 @@ node dist/index.js
 - `asc_ping`
 - `asc_request`
 - `asc_download_finance_report`
+- `asc_create_analytics_report_request` (gated)
+- `asc_list_analytics_report_requests`
+- `asc_list_analytics_reports`
+- `asc_list_analytics_report_instances`
+- `asc_download_analytics_report_instance`
+- `asc_analytics_overview_summary`
 - `asc_list_apps`
 - `asc_get_app`
 - `asc_list_app_store_versions`

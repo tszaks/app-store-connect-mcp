@@ -2,6 +2,7 @@ import type { ToolDef } from './registry.js';
 import { requireWriteConfirm } from '../safety.js';
 import { requireObject, requireString, optionalString } from './helpers.js';
 import { AscHttpClient } from '../asc/http.js';
+import { buildAnalyticsTools } from './analytics.js';
 
 function requirePathUnderV1(path: string): string {
   const p = path.startsWith('/') ? path : `/${path}`;
@@ -24,6 +25,18 @@ function splitReportLines(text: string): string[] {
   const normalized = text.replace(/\r\n/g, '\n');
   const trimmed = normalized.endsWith('\n') ? normalized.slice(0, -1) : normalized;
   return trimmed ? trimmed.split('\n') : [];
+}
+
+function expandFilterKeys(args: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(args)) {
+    if (k.startsWith('filter_')) {
+      out[`filter[${k.slice(7)}]`] = v;
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
 }
 
 export function buildTools(asc: AscHttpClient): ToolDef[] {
@@ -147,6 +160,8 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
     },
   });
 
+  tools.push(...buildAnalyticsTools(asc));
+
   // -----------------------
   // Apps
   // -----------------------
@@ -157,12 +172,12 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
       type: 'object',
       properties: {
         limit: { type: 'number' },
-        'filter[bundleId]': { type: 'string' },
-        'filter[name]': { type: 'string' },
+        filter_bundleId: { type: 'string' },
+        filter_name: { type: 'string' },
       },
     },
     handler: async (args) => {
-      const query = args as any;
+      const query = expandFilterKeys(args as any);
       const res = await asc.request({ method: 'GET', path: '/apps', query });
       return JSON.stringify(res.json, null, 2);
     },
@@ -396,13 +411,13 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
         limit: { type: 'number' },
         include: { type: 'string' },
         sort: { type: 'string' },
-        'filter[processingState]': { type: 'string' },
-        'filter[version]': { type: 'string' },
+        filter_processingState: { type: 'string' },
+        filter_version: { type: 'string' },
       },
     },
     handler: async (args) => {
       const appId = optionalString(args.app_id);
-      const query: any = { ...args };
+      const query: any = expandFilterKeys({ ...args as any });
       delete query.app_id;
       const path = appId ? `/apps/${appId}/builds` : '/builds';
       const res = await asc.request({ method: 'GET', path, query });
@@ -892,12 +907,12 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
       type: 'object',
       properties: {
         limit: { type: 'number' },
-        'filter[platform]': { type: 'string', description: 'e.g. IOS' },
-        'filter[status]': { type: 'string' },
+        filter_platform: { type: 'string', description: 'e.g. IOS' },
+        filter_status: { type: 'string' },
       },
     },
     handler: async (args) => {
-      const query = args as any;
+      const query = expandFilterKeys(args as any);
       const res = await asc.request({ method: 'GET', path: '/devices', query });
       return JSON.stringify(res.json, null, 2);
     },
@@ -937,12 +952,12 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
         limit: { type: 'number' },
         include: { type: 'string' },
         sort: { type: 'string' },
-        'filter[profileType]': { type: 'string' },
-        'filter[name]': { type: 'string' },
+        filter_profileType: { type: 'string' },
+        filter_name: { type: 'string' },
       },
     },
     handler: async (args) => {
-      const query = args as any;
+      const query = expandFilterKeys(args as any);
       const res = await asc.request({ method: 'GET', path: '/profiles', query });
       return JSON.stringify(res.json, null, 2);
     },

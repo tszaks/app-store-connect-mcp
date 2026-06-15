@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 function cleanEnv(v: unknown): string | undefined {
   if (typeof v !== 'string') return undefined;
   const t = v.trim();
@@ -27,3 +29,19 @@ export function getIntEnv(name: string, defaultValue: number): number {
   return Number.isFinite(n) ? n : defaultValue;
 }
 
+export function resolvePrivateKey(
+  env: Record<string, string | undefined> = process.env,
+  readFile: (path: string, encoding: BufferEncoding) => string | Buffer = readFileSync,
+): string {
+  const inline = cleanEnv(env.ASC_PRIVATE_KEY);
+  if (inline) return inline;
+
+  const file = cleanEnv(env.ASC_PRIVATE_KEY_FILE);
+  if (file) {
+    const contents = String(readFile(file, 'utf8'));
+    if (!contents.trim()) throw new Error(`ASC_PRIVATE_KEY_FILE is empty: ${file}`);
+    return contents;
+  }
+
+  throw new Error('Missing required env var: ASC_PRIVATE_KEY or ASC_PRIVATE_KEY_FILE');
+}

@@ -2,7 +2,8 @@ import { importPKCS8, SignJWT } from 'jose';
 
 function normalizePrivateKey(raw: string): string {
   // Support env var strings with literal '\n'
-  return raw.includes('\\n') ? raw.replace(/\\\\n/g, '\n') : raw;
+  const normalized = raw.includes('\\n') ? raw.replace(/\\n/g, '\n') : raw;
+  return normalized.trim();
 }
 
 export type AscJwtConfig = {
@@ -49,4 +50,3 @@ export class AscJwtProvider {
     return token;
   }
 }
-
