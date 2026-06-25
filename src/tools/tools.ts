@@ -537,16 +537,46 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
     handler: async (args) => {
       requireWriteConfirm({ confirm: Boolean(args.confirm), reason: optionalString(args.reason) });
       const versionId = requireString(args.version_id, 'version_id');
-      const body = {
-        data: {
-          type: 'reviewSubmissions',
-          relationships: {
-            appStoreVersion: { data: { type: 'appStoreVersions', id: versionId } },
+      // reviewSubmissions has no appStoreVersion relationship. Correct flow:
+      // 1) resolve platform + app from the version, 2) create the submission
+      // (app + platform), 3) attach the version via reviewSubmissionItems.
+      const verRes = await asc.request({
+        method: 'GET',
+        path: `/appStoreVersions/${versionId}`,
+        query: { include: 'app' },
+      });
+      const verData = (verRes.json as any)?.data;
+      const platform = verData?.attributes?.platform;
+      const appId = verData?.relationships?.app?.data?.id;
+      if (!platform || !appId) {
+        throw new Error(`Could not resolve platform/app for appStoreVersion ${versionId}`);
+      }
+      const subRes = await asc.request({
+        method: 'POST',
+        path: '/reviewSubmissions',
+        body: {
+          data: {
+            type: 'reviewSubmissions',
+            attributes: { platform },
+            relationships: { app: { data: { type: 'apps', id: appId } } },
           },
         },
-      };
-      const res = await asc.request({ method: 'POST', path: '/reviewSubmissions', body });
-      return JSON.stringify(res.json, null, 2);
+      });
+      const submissionId = (subRes.json as any)?.data?.id;
+      const itemRes = await asc.request({
+        method: 'POST',
+        path: '/reviewSubmissionItems',
+        body: {
+          data: {
+            type: 'reviewSubmissionItems',
+            relationships: {
+              reviewSubmission: { data: { type: 'reviewSubmissions', id: submissionId } },
+              appStoreVersion: { data: { type: 'appStoreVersions', id: versionId } },
+            },
+          },
+        },
+      });
+      return JSON.stringify({ reviewSubmission: subRes.json, item: itemRes.json }, null, 2);
     },
   });
 
@@ -565,9 +595,9 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
     handler: async (args) => {
       requireWriteConfirm({ confirm: Boolean(args.confirm), reason: optionalString(args.reason) });
       const id = requireString(args.review_submission_id, 'review_submission_id');
-      const body = { data: { type: 'reviewSubmissions', id } };
-      // ASC uses a "submit" relationship endpoint for submission actions.
-      const res = await asc.request({ method: 'POST', path: `/reviewSubmissions/${id}/actions/submit`, body });
+      // Submitting is a PATCH that sets submitted=true (there is no actions/submit URL).
+      const body = { data: { type: 'reviewSubmissions', id, attributes: { submitted: true } } };
+      const res = await asc.request({ method: 'PATCH', path: `/reviewSubmissions/${id}`, body });
       return JSON.stringify(res.json, null, 2);
     },
   });
