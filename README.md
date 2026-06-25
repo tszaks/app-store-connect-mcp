@@ -83,6 +83,7 @@ node dist/index.js
 - `asc_list_devices`
 - `asc_register_device` (gated)
 - `asc_list_profiles`
+- `asc_upload_build` (gated) — upload an `.ipa`/`.pkg` to App Store Connect via `altool` using the server's configured key
 
 More can be added quickly via `asc_request` or by extending `src/tools/`.
 ## Quickstart TL;DR

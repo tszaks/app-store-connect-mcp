@@ -1,6 +1,6 @@
 import { importPKCS8, SignJWT } from 'jose';
 
-function normalizePrivateKey(raw: string): string {
+export function normalizePrivateKey(raw: string): string {
   // Support env var strings with literal '\n'
   const normalized = raw.includes('\\n') ? raw.replace(/\\n/g, '\n') : raw;
   return normalized.trim();
