@@ -1,3 +1,5 @@
+import { gunzipSync } from 'node:zlib';
+
 import { getBoolEnv } from './env.js';
 
 export type AscHttpConfig = {
@@ -54,7 +56,69 @@ export class AscHttpClient {
     path: string; // must start with '/'
     query?: Record<string, unknown>;
     body?: Json;
+    accept?: string;
   }): Promise<{ status: number; headers: Record<string, string>; json: Json }> {
+    const raw = await this.requestBuffer(args);
+    const text = raw.body.toString('utf8');
+    const json = text ? safeJsonParse(text) : null;
+    return { status: raw.status, headers: raw.headers, json };
+  }
+
+  async requestText(args: {
+    method: string;
+    path: string; // must start with '/'
+    query?: Record<string, unknown>;
+    body?: Json;
+    accept?: string;
+  }): Promise<{ status: number; headers: Record<string, string>; text: string; isCompressed: boolean }> {
+    const raw = await this.requestBuffer(args);
+    return {
+      status: raw.status,
+      headers: raw.headers,
+      text: raw.body.toString('utf8'),
+      isCompressed: raw.isCompressed,
+    };
+  }
+
+  async downloadUrlText(
+    url: string,
+  ): Promise<{ status: number; headers: Record<string, string>; text: string; isCompressed: boolean }> {
+    const res = await this.fetchWithRetry(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/a-gzip',
+      },
+    });
+
+    const bytes = Buffer.from(await res.arrayBuffer());
+    const outHeaders: Record<string, string> = {};
+    res.headers.forEach((v, k) => (outHeaders[k] = v));
+
+    if (!res.ok) {
+      const text = bytes.toString('utf8');
+      const json = text ? safeJsonParse(text) : null;
+      const msg = (json && (json.errors?.[0]?.detail || json.errors?.[0]?.title)) || res.statusText;
+      throw new Error(`ASC signed URL HTTP ${res.status}: ${msg}`);
+    }
+
+    const isCompressed = looksLikeGzip(bytes) || headerHintsGzip(outHeaders);
+    const bodyBuffer = looksLikeGzip(bytes) ? gunzipSync(bytes) : bytes;
+
+    return {
+      status: res.status,
+      headers: outHeaders,
+      text: bodyBuffer.toString('utf8'),
+      isCompressed,
+    };
+  }
+
+  private async requestBuffer(args: {
+    method: string;
+    path: string; // must start with '/'
+    query?: Record<string, unknown>;
+    body?: Json;
+    accept?: string;
+  }): Promise<{ status: number; headers: Record<string, string>; body: Buffer; isCompressed: boolean }> {
     const baseUrl = this.config.baseUrl.replace(/\/+$/, '');
     const path = args.path.startsWith('/') ? args.path : `/${args.path}`;
     const url = `${baseUrl}${path}${toQueryString(args.query)}`;
@@ -62,7 +126,7 @@ export class AscHttpClient {
     const token = await this.config.getToken();
     const headers: Record<string, string> = {
       Authorization: `Bearer ${token}`,
-      Accept: 'application/json',
+      Accept: args.accept ?? 'application/json',
     };
     let body: string | undefined;
     if (args.body !== undefined) {
@@ -76,17 +140,21 @@ export class AscHttpClient {
       body,
     });
 
-    const text = await res.text();
-    const json = text ? safeJsonParse(text) : null;
+    const bytes = Buffer.from(await res.arrayBuffer());
     const outHeaders: Record<string, string> = {};
     res.headers.forEach((v, k) => (outHeaders[k] = v));
 
     if (!res.ok) {
+      const text = bytes.toString('utf8');
+      const json = text ? safeJsonParse(text) : null;
       const msg = (json && (json.errors?.[0]?.detail || json.errors?.[0]?.title)) || res.statusText;
       throw new Error(`ASC HTTP ${res.status}: ${msg}`);
     }
 
-    return { status: res.status, headers: outHeaders, json };
+    const isCompressed = looksLikeGzip(bytes) || headerHintsGzip(outHeaders);
+    const bodyBuffer = looksLikeGzip(bytes) ? gunzipSync(bytes) : bytes;
+
+    return { status: res.status, headers: outHeaders, body: bodyBuffer, isCompressed };
   }
 
   private async fetchWithRetry(
@@ -132,6 +200,16 @@ export class AscHttpClient {
   }
 }
 
+function looksLikeGzip(buf: Buffer): boolean {
+  return buf.length >= 2 && buf[0] === 0x1f && buf[1] === 0x8b;
+}
+
+function headerHintsGzip(headers: Record<string, string>): boolean {
+  const contentType = headers['content-type'] ?? '';
+  const disposition = headers['content-disposition'] ?? '';
+  return /gzip|x-gzip|a-gzip/i.test(contentType) || /\.gz\b/i.test(disposition);
+}
+
 function safeJsonParse(text: string): any {
   try {
     return JSON.parse(text);
@@ -149,4 +227,3 @@ function backoffMs(attempt: number): number {
   const jitter = Math.floor(Math.random() * 250);
   return base + jitter;
 }
-

@@ -8,7 +8,7 @@ import {
   type CallToolResult,
 } from '@modelcontextprotocol/sdk/types.js';
 
-import { requireEnv, getEnv, getIntEnv } from './asc/env.js';
+import { requireEnv, getEnv, getIntEnv, resolvePrivateKey } from './asc/env.js';
 import { AscJwtProvider } from './asc/jwt.js';
 import { AscHttpClient } from './asc/http.js';
 import { buildTools } from './tools/tools.js';
@@ -26,7 +26,7 @@ function requireString(value: unknown, field: string): string {
 
 const issuerId = requireEnv('ASC_ISSUER_ID');
 const keyId = requireEnv('ASC_KEY_ID');
-const privateKey = requireEnv('ASC_PRIVATE_KEY');
+const privateKey = resolvePrivateKey();
 
 const baseUrl = (getEnv('ASC_BASE_URL') ?? 'https://api.appstoreconnect.apple.com/v1')
   .replace(/\/+$/, '');
@@ -47,7 +47,7 @@ const asc = new AscHttpClient({
 const toolDefs = buildTools(asc);
 
 const server = new Server(
-  { name: 'app-store-connect-mcp', version: '0.1.0' },
+  { name: 'app-store-connect-mcp', version: '0.3.0' },
   { capabilities: { tools: {} } },
 );
 
@@ -83,4 +83,3 @@ main().catch((e) => {
   console.error(e);
   process.exit(1);
 });
-

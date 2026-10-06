@@ -2,6 +2,9 @@ import type { ToolDef } from './registry.js';
 import { requireWriteConfirm } from '../safety.js';
 import { requireObject, requireString, optionalString } from './helpers.js';
 import { AscHttpClient } from '../asc/http.js';
+import { buildAnalyticsTools } from './analytics.js';
+import { buildUploadTools } from './upload.js';
+import { buildExpediteTools } from './expedite.js';
 
 function requirePathUnderV1(path: string): string {
   const p = path.startsWith('/') ? path : `/${path}`;
@@ -9,6 +12,33 @@ function requirePathUnderV1(path: string): string {
     throw new Error("path must start with '/v1/'");
   }
   return p.replace(/^\/v1/, ''); // our http client baseUrl includes /v1
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function splitReportLines(text: string): string[] {
+  if (!text) return [];
+  const normalized = text.replace(/\r\n/g, '\n');
+  const trimmed = normalized.endsWith('\n') ? normalized.slice(0, -1) : normalized;
+  return trimmed ? trimmed.split('\n') : [];
+}
+
+function expandFilterKeys(args: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(args)) {
+    if (k.startsWith('filter_')) {
+      out[`filter[${k.slice(7)}]`] = v;
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
 }
 
 export function buildTools(asc: AscHttpClient): ToolDef[] {
@@ -55,6 +85,87 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
     },
   });
 
+  tools.push({
+    name: 'asc_download_finance_report',
+    description:
+      'Download an App Store Connect finance report and return a preview or full text. Requires Account Holder, Admin, or Finance access in App Store Connect.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        vendor_number: { type: 'string', description: 'Your App Store Connect vendor number.' },
+        report_date: {
+          type: 'string',
+          description: "Apple fiscal reporting period, typically 'YYYY-MM'.",
+        },
+        report_type: {
+          type: 'string',
+          description:
+            "Apple finance report type, for example 'FINANCIAL' or 'FINANCE_DETAIL'.",
+        },
+        region_code: {
+          type: 'string',
+          description: "Region filter. Defaults to 'ZZ' for all countries/regions.",
+        },
+        full_report: {
+          type: 'boolean',
+          description: 'When true, return the full report text instead of only a preview.',
+        },
+        line_limit: {
+          type: 'number',
+          description: 'Preview line count when full_report is false. Defaults to 40.',
+        },
+      },
+      required: ['vendor_number', 'report_date', 'report_type'],
+    },
+    handler: async (args) => {
+      const vendorNumber = requireString(args.vendor_number, 'vendor_number');
+      const reportDate = requireString(args.report_date, 'report_date');
+      const reportType = requireString(args.report_type, 'report_type');
+      const regionCode = optionalString(args.region_code) ?? 'ZZ';
+      const fullReport = Boolean(args.full_report);
+      const lineLimit = clamp(optionalNumber(args.line_limit) ?? 40, 1, 500);
+
+      const response = await asc.requestText({
+        method: 'GET',
+        path: '/financeReports',
+        accept: 'application/a-gzip',
+        query: {
+          'filter[vendorNumber]': vendorNumber,
+          'filter[reportDate]': reportDate,
+          'filter[reportType]': reportType,
+          'filter[regionCode]': regionCode,
+        },
+      });
+
+      const lines = splitReportLines(response.text);
+      const previewText = lines.slice(0, lineLimit).join('\n');
+      const fileNameMatch = /filename="?([^"]+)"?/i.exec(response.headers['content-disposition'] ?? '');
+
+      return JSON.stringify(
+        {
+          vendor_number: vendorNumber,
+          report_date: reportDate,
+          report_type: reportType,
+          region_code: regionCode,
+          file_name: fileNameMatch?.[1] ?? null,
+          content_type: response.headers['content-type'] ?? null,
+          is_compressed: response.isCompressed,
+          line_count: lines.length,
+          preview_line_count: Math.min(lineLimit, lines.length),
+          preview_text: previewText,
+          report_text: fullReport ? response.text : undefined,
+          report_text_included: fullReport,
+        },
+        null,
+        2,
+      );
+    },
+  });
+
+  tools.push(...buildAnalyticsTools(asc));
+  tools.push(...buildUploadTools());
+  tools.push(...buildExpediteTools(asc));
+
   // -----------------------
   // Apps
   // -----------------------
@@ -65,12 +176,12 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
       type: 'object',
       properties: {
         limit: { type: 'number' },
-        'filter[bundleId]': { type: 'string' },
-        'filter[name]': { type: 'string' },
+        filter_bundleId: { type: 'string' },
+        filter_name: { type: 'string' },
       },
     },
     handler: async (args) => {
-      const query = args as any;
+      const query = expandFilterKeys(args as any);
       const res = await asc.request({ method: 'GET', path: '/apps', query });
       return JSON.stringify(res.json, null, 2);
     },
@@ -304,13 +415,13 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
         limit: { type: 'number' },
         include: { type: 'string' },
         sort: { type: 'string' },
-        'filter[processingState]': { type: 'string' },
-        'filter[version]': { type: 'string' },
+        filter_processingState: { type: 'string' },
+        filter_version: { type: 'string' },
       },
     },
     handler: async (args) => {
       const appId = optionalString(args.app_id);
-      const query: any = { ...args };
+      const query: any = expandFilterKeys({ ...args as any });
       delete query.app_id;
       const path = appId ? `/apps/${appId}/builds` : '/builds';
       const res = await asc.request({ method: 'GET', path, query });
@@ -428,16 +539,46 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
     handler: async (args) => {
       requireWriteConfirm({ confirm: Boolean(args.confirm), reason: optionalString(args.reason) });
       const versionId = requireString(args.version_id, 'version_id');
-      const body = {
-        data: {
-          type: 'reviewSubmissions',
-          relationships: {
-            appStoreVersion: { data: { type: 'appStoreVersions', id: versionId } },
+      // reviewSubmissions has no appStoreVersion relationship. Correct flow:
+      // 1) resolve platform + app from the version, 2) create the submission
+      // (app + platform), 3) attach the version via reviewSubmissionItems.
+      const verRes = await asc.request({
+        method: 'GET',
+        path: `/appStoreVersions/${versionId}`,
+        query: { include: 'app' },
+      });
+      const verData = (verRes.json as any)?.data;
+      const platform = verData?.attributes?.platform;
+      const appId = verData?.relationships?.app?.data?.id;
+      if (!platform || !appId) {
+        throw new Error(`Could not resolve platform/app for appStoreVersion ${versionId}`);
+      }
+      const subRes = await asc.request({
+        method: 'POST',
+        path: '/reviewSubmissions',
+        body: {
+          data: {
+            type: 'reviewSubmissions',
+            attributes: { platform },
+            relationships: { app: { data: { type: 'apps', id: appId } } },
           },
         },
-      };
-      const res = await asc.request({ method: 'POST', path: '/reviewSubmissions', body });
-      return JSON.stringify(res.json, null, 2);
+      });
+      const submissionId = (subRes.json as any)?.data?.id;
+      const itemRes = await asc.request({
+        method: 'POST',
+        path: '/reviewSubmissionItems',
+        body: {
+          data: {
+            type: 'reviewSubmissionItems',
+            relationships: {
+              reviewSubmission: { data: { type: 'reviewSubmissions', id: submissionId } },
+              appStoreVersion: { data: { type: 'appStoreVersions', id: versionId } },
+            },
+          },
+        },
+      });
+      return JSON.stringify({ reviewSubmission: subRes.json, item: itemRes.json }, null, 2);
     },
   });
 
@@ -456,9 +597,9 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
     handler: async (args) => {
       requireWriteConfirm({ confirm: Boolean(args.confirm), reason: optionalString(args.reason) });
       const id = requireString(args.review_submission_id, 'review_submission_id');
-      const body = { data: { type: 'reviewSubmissions', id } };
-      // ASC uses a "submit" relationship endpoint for submission actions.
-      const res = await asc.request({ method: 'POST', path: `/reviewSubmissions/${id}/actions/submit`, body });
+      // Submitting is a PATCH that sets submitted=true (there is no actions/submit URL).
+      const body = { data: { type: 'reviewSubmissions', id, attributes: { submitted: true } } };
+      const res = await asc.request({ method: 'PATCH', path: `/reviewSubmissions/${id}`, body });
       return JSON.stringify(res.json, null, 2);
     },
   });
@@ -800,12 +941,12 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
       type: 'object',
       properties: {
         limit: { type: 'number' },
-        'filter[platform]': { type: 'string', description: 'e.g. IOS' },
-        'filter[status]': { type: 'string' },
+        filter_platform: { type: 'string', description: 'e.g. IOS' },
+        filter_status: { type: 'string' },
       },
     },
     handler: async (args) => {
-      const query = args as any;
+      const query = expandFilterKeys(args as any);
       const res = await asc.request({ method: 'GET', path: '/devices', query });
       return JSON.stringify(res.json, null, 2);
     },
@@ -845,12 +986,12 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
         limit: { type: 'number' },
         include: { type: 'string' },
         sort: { type: 'string' },
-        'filter[profileType]': { type: 'string' },
-        'filter[name]': { type: 'string' },
+        filter_profileType: { type: 'string' },
+        filter_name: { type: 'string' },
       },
     },
     handler: async (args) => {
-      const query = args as any;
+      const query = expandFilterKeys(args as any);
       const res = await asc.request({ method: 'GET', path: '/profiles', query });
       return JSON.stringify(res.json, null, 2);
     },

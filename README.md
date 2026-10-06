@@ -21,7 +21,7 @@ npm run build
 Required:
 - `ASC_ISSUER_ID`
 - `ASC_KEY_ID`
-- `ASC_PRIVATE_KEY` (the `.p8` contents; supports `\\n`-escaped newlines)
+- `ASC_PRIVATE_KEY` (the `.p8` contents; supports `\\n`-escaped newlines) or `ASC_PRIVATE_KEY_FILE`
 
 Optional:
 - `ASC_BASE_URL` (default `https://api.appstoreconnect.apple.com/v1`)
@@ -41,6 +41,13 @@ node dist/index.js
 
 - `asc_ping`
 - `asc_request`
+- `asc_download_finance_report`
+- `asc_create_analytics_report_request` (gated)
+- `asc_list_analytics_report_requests`
+- `asc_list_analytics_reports`
+- `asc_list_analytics_report_instances`
+- `asc_download_analytics_report_instance`
+- `asc_analytics_overview_summary`
 - `asc_list_apps`
 - `asc_get_app`
 - `asc_list_app_store_versions`
@@ -76,9 +83,10 @@ node dist/index.js
 - `asc_list_devices`
 - `asc_register_device` (gated)
 - `asc_list_profiles`
+- `asc_upload_build` (gated) — upload an `.ipa`/`.pkg` to App Store Connect via `altool` using the server's configured key
+- `asc_prepare_expedite` — Apple has **no API** for expedited review (it is a web form behind an Apple ID login). This checks the version is `WAITING_FOR_REVIEW`, copies paste-ready text to the clipboard, and opens Apple's form. A signed-in person pastes and clicks Submit. Makes no changes in App Store Connect.
 
 More can be added quickly via `asc_request` or by extending `src/tools/`.
-
 ## Quickstart TL;DR
 
 ```bash
@@ -113,3 +121,26 @@ How it works:
 Safety:
 - POST/PATCH/DELETE require confirm=true and reason
 ```
+
+## Finance Reports
+
+`asc_download_finance_report` downloads the Apple finance report file from `/v1/financeReports`, automatically expands gzip-compressed responses, and returns either:
+
+- a preview (default, first 40 lines)
+- or the full report text with `full_report: true`
+
+Example:
+
+```json
+{
+  "vendor_number": "93635270",
+  "report_date": "2026-03",
+  "report_type": "FINANCIAL",
+  "region_code": "ZZ"
+}
+```
+
+Notes:
+- `region_code` defaults to `ZZ` for all countries or regions
+- `report_type` is passed through as-is so you can use the exact Apple value you need, such as `FINANCIAL` or `FINANCE_DETAIL`
+- Apple requires the App Store Connect API key user to have `Account Holder`, `Admin`, or `Finance` access for finance reports
