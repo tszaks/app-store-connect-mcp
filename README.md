@@ -40,7 +40,7 @@ node dist/index.js
 ## Tools
 
 - `asc_ping`
-- `asc_request`
+- `asc_request` — any endpoint; path starts with `/v1/`, `/v2/`, or `/v3/`
 - `asc_download_finance_report`
 - `asc_create_analytics_report_request` (gated)
 - `asc_list_analytics_report_requests`
@@ -86,7 +86,34 @@ node dist/index.js
 - `asc_upload_build` (gated) — upload an `.ipa`/`.pkg` to App Store Connect via `altool` using the server's configured key
 - `asc_prepare_expedite` — Apple has **no API** for expedited review (it is a web form behind an Apple ID login). This checks the version is `WAITING_FOR_REVIEW`, copies paste-ready text to the clipboard, and opens Apple's form. A signed-in person pastes and clicks Submit. Makes no changes in App Store Connect.
 
-More can be added quickly via `asc_request` or by extending `src/tools/`.
+### Feature tools (one tool per feature, `action` = list / get / create / update / delete)
+
+Each tool offers only the actions Apple's API has for that feature, and fills in relationship types for you (`relationships: {"app": "123"}`). Writes need `confirm: true` and `reason`. Actions and fields come from `src/spec/asc-spec.ts`, a snapshot of Apple's OpenAPI spec.
+
+- Ratings and Reviews: `asc_customer_reviews`, `asc_customer_review_responses`
+- Custom Product Pages: `asc_custom_product_pages`, `asc_custom_product_page_versions`, `asc_custom_product_page_localizations`
+- Product Page Optimization: `asc_product_page_experiments` (v2), `asc_product_page_experiment_treatments`, `asc_product_page_experiment_treatment_localizations`
+- Asset Library: `asc_asset_library`, `asc_asset_library_images`, `asc_asset_library_videos`, `asc_asset_library_placements`, `asc_asset_library_placement_ordering`, `asc_asset_library_ref_data`
+- In-App Events: `asc_app_events`, `asc_app_event_localizations`, `asc_app_event_screenshots`, `asc_app_event_video_clips`
+- Featuring and accessibility: `asc_nominations`, `asc_accessibility_declarations`, `asc_promoted_purchases`
+- Offers: `asc_win_back_offers`, `asc_subscription_offer_codes`, `asc_subscription_offer_code_one_time_codes`, `asc_subscription_offer_code_custom_codes`, `asc_iap_offer_codes`, `asc_iap_offer_code_one_time_codes`, `asc_iap_offer_code_custom_codes`
+- Screenshots and previews: `asc_screenshot_sets`, `asc_screenshots`, `asc_preview_sets`, `asc_previews`
+- `asc_upload_asset` (gated) — upload a screenshot, preview, event image/video, Asset Library image/video, or IAP/subscription review screenshot (reserve, send parts, confirm with checksum)
+
+Not possible through Apple's API: expedited review (see `asc_prepare_expedite`) and app promo codes (use offer codes).
+
+### Updating the spec snapshot
+
+When Apple ships a new API version:
+
+```bash
+curl -sSLO https://developer.apple.com/sample-code/app-store-connect/app-store-connect-openapi-specification.zip
+unzip -o app-store-connect-openapi-specification.zip
+node scripts/gen-spec.mjs openapi.oas.json
+npm test
+```
+
+More can be added via `asc_request` or by adding a row to `FAMILIES` in `src/tools/resources.ts`.
 ## Quickstart TL;DR
 
 ```bash

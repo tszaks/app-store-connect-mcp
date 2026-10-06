@@ -121,7 +121,10 @@ export class AscHttpClient {
   }): Promise<{ status: number; headers: Record<string, string>; body: Buffer; isCompressed: boolean }> {
     const baseUrl = this.config.baseUrl.replace(/\/+$/, '');
     const path = args.path.startsWith('/') ? args.path : `/${args.path}`;
-    const url = `${baseUrl}${path}${toQueryString(args.query)}`;
+    // Paths that name their own API version (e.g. '/v2/...') go to the API root;
+    // all other paths stay relative to baseUrl, which already ends in '/v1'.
+    const root = /^\/v\d+\//.test(path) ? baseUrl.replace(/\/v\d+$/, '') : baseUrl;
+    const url = `${root}${path}${toQueryString(args.query)}`;
 
     const token = await this.config.getToken();
     const headers: Record<string, string> = {
