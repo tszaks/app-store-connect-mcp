@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFileSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 
 import type { AscHttpClient } from '../asc/http.js';
@@ -83,7 +83,7 @@ export function buildAssetTools(asc: AscHttpClient, fetchImpl: typeof fetch = (.
         if (!createShape || !updateShape) throw new Error(`Spec has no upload endpoints for ${kind.base}`);
 
         const bytes = readFileSync(filePath);
-        const attributes = { ...extra, fileName: basename(filePath), fileSize: statSync(filePath).size };
+        const attributes = { ...extra, fileName: basename(filePath), fileSize: bytes.length };
         const missing = createShape.requiredAttributes.filter((a) => attributes[a as keyof typeof attributes] === undefined);
         if (missing.length) throw new Error(`Missing required attributes: ${missing.join(', ')}`);
 

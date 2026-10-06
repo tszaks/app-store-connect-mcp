@@ -272,6 +272,8 @@ export function familyActions(f: Family): Action[] {
 }
 
 function fill(template: string, id: string): string {
+  // '.' and '..' survive encodeURIComponent and would change the path.
+  if (/^\.+$/.test(id)) throw new Error(`Invalid id '${id}'`);
   return template.replace('{id}', encodeURIComponent(id));
 }
 
@@ -289,13 +291,13 @@ export function buildRelationships(
       const valid = Object.keys(shape.relationships).join(', ') || 'none';
       throw new Error(`Unknown relationship '${name}'. Valid: ${valid}`);
     }
-    if (value && typeof value === 'object' && !Array.isArray(value) && 'data' in value) {
+    if (value === null) {
+      out[name] = { data: rel.many ? [] : null }; // clear the link
+    } else if (typeof value === 'object' && !Array.isArray(value) && 'data' in value) {
       out[name] = value; // already JSON:API
     } else if (rel.many) {
       const ids = Array.isArray(value) ? value : [value];
       out[name] = { data: ids.map((id) => ({ type: rel.type, id: String(id) })) };
-    } else if (value === null) {
-      out[name] = { data: null };
     } else {
       out[name] = { data: { type: rel.type, id: String(value) } };
     }

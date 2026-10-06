@@ -194,3 +194,21 @@ test('asc_upload_asset stops and does not confirm when a part fails', async () =
   );
   assert.equal(calls.filter((c) => c.method === 'PATCH').length, 0);
 });
+
+test('null clears a link: [] for to-many, null for to-one', async () => {
+  const { calls, asc } = recorder();
+  const tool = buildFamilyTool(asc, family('asc_asset_library_images'));
+  await tool.handler({ action: 'update', id: 'img-1', relationships: {}, attributes: { archived: true }, confirm: true, reason: 't' });
+  const { buildRelationships } = await import('../dist/tools/resources.js');
+  const shape = { type: 'x', attributes: [], requiredAttributes: [], relationships: { many: { type: 'a', many: true, required: false }, one: { type: 'b', many: false, required: false } } };
+  assert.deepEqual(buildRelationships(shape, { many: null, one: null }), { many: { data: [] }, one: { data: null } });
+  assert.equal(calls[0].path, '/v1/appAssetLibraryImages/img-1');
+});
+
+test('dot-only ids are refused before any request', async () => {
+  const { calls, asc } = recorder();
+  const tool = buildFamilyTool(asc, family('asc_customer_reviews'));
+  await assert.rejects(tool.handler({ action: 'get', id: '..' }), /Invalid id/);
+  await assert.rejects(tool.handler({ action: 'list', parent: 'app', parent_id: '.' }), /Invalid id/);
+  assert.equal(calls.length, 0);
+});
