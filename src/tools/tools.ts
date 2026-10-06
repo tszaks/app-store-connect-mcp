@@ -5,13 +5,15 @@ import { AscHttpClient } from '../asc/http.js';
 import { buildAnalyticsTools } from './analytics.js';
 import { buildUploadTools } from './upload.js';
 import { buildExpediteTools } from './expedite.js';
+import { buildResourceTools } from './resources.js';
+import { buildAssetTools } from './assets.js';
 
-function requirePathUnderV1(path: string): string {
+function requireVersionedPath(path: string): string {
   const p = path.startsWith('/') ? path : `/${path}`;
-  if (!p.startsWith('/v1/')) {
-    throw new Error("path must start with '/v1/'");
+  if (!/^\/v[123]\//.test(p)) {
+    throw new Error("path must start with '/v1/', '/v2/', or '/v3/'");
   }
-  return p.replace(/^\/v1/, ''); // our http client baseUrl includes /v1
+  return p; // the http client routes versioned paths to the API root
 }
 
 function optionalNumber(value: unknown): number | undefined {
@@ -56,12 +58,12 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
   tools.push({
     name: 'asc_request',
     description:
-      "Generic App Store Connect request escape hatch. path must start with '/v1/'. Non-GET requires confirm=true and reason.",
+      "Generic App Store Connect request escape hatch for any endpoint. path must start with '/v1/', '/v2/', or '/v3/'. Non-GET requires confirm=true and reason.",
     inputSchema: {
       type: 'object',
       properties: {
         method: { type: 'string', enum: ['GET', 'POST', 'PATCH', 'DELETE'] },
-        path: { type: 'string', description: "Must start with '/v1/'" },
+        path: { type: 'string', description: "Must start with '/v1/', '/v2/', or '/v3/'" },
         query: { type: 'object', additionalProperties: true },
         body: { type: 'object', additionalProperties: true },
         confirm: { type: 'boolean' },
@@ -71,7 +73,7 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
     },
     handler: async (args) => {
       const method = requireString(args.method, 'method').toUpperCase();
-      const path = requirePathUnderV1(requireString(args.path, 'path'));
+      const path = requireVersionedPath(requireString(args.path, 'path'));
       if (method !== 'GET') {
         requireWriteConfirm({
           confirm: Boolean(args.confirm),
@@ -165,6 +167,8 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
   tools.push(...buildAnalyticsTools(asc));
   tools.push(...buildUploadTools());
   tools.push(...buildExpediteTools(asc));
+  tools.push(...buildResourceTools(asc));
+  tools.push(...buildAssetTools(asc));
 
   // -----------------------
   // Apps

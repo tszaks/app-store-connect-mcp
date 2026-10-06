@@ -1,6 +1,6 @@
 {
   "name": "app-store-connect-mcp",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "App Store Connect MCP server (high coverage + asc_request escape hatch)",
   "type": "module",
   "main": "dist/index.js",
