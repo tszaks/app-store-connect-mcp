@@ -84,6 +84,7 @@ node dist/index.js
 - `asc_register_device` (gated)
 - `asc_list_profiles`
 - `asc_upload_build` (gated) — upload an `.ipa`/`.pkg` to App Store Connect via `altool` using the server's configured key
+- `asc_prepare_expedite` — Apple has **no API** for expedited review (it is a web form behind an Apple ID login). This checks the version is `WAITING_FOR_REVIEW`, copies paste-ready text to the clipboard, and opens Apple's form. A signed-in person pastes and clicks Submit. Makes no changes in App Store Connect.
 
 More can be added quickly via `asc_request` or by extending `src/tools/`.
 ## Quickstart TL;DR

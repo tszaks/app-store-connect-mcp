@@ -4,6 +4,7 @@ import { requireObject, requireString, optionalString } from './helpers.js';
 import { AscHttpClient } from '../asc/http.js';
 import { buildAnalyticsTools } from './analytics.js';
 import { buildUploadTools } from './upload.js';
+import { buildExpediteTools } from './expedite.js';
 
 function requirePathUnderV1(path: string): string {
   const p = path.startsWith('/') ? path : `/${path}`;
@@ -163,6 +164,7 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
 
   tools.push(...buildAnalyticsTools(asc));
   tools.push(...buildUploadTools());
+  tools.push(...buildExpediteTools(asc));
 
   // -----------------------
   // Apps
