@@ -20,6 +20,7 @@ const schemas = spec.components.schemas;
 const refName = (ref) => ref.split('/').pop();
 
 function writeShape(schemaName) {
+  const acceptsIncluded = Boolean(schemas[schemaName]?.properties?.included);
   const data = schemas[schemaName]?.properties?.data;
   const type = data?.properties?.type?.enum?.[0];
   // Link-only bodies (data is an array of ids) are not resource writes.
@@ -40,6 +41,7 @@ function writeShape(schemaName) {
     attributes: Object.keys(attrsSchema.properties ?? {}),
     requiredAttributes: attrsSchema.required ?? [],
     relationships: rels,
+    ...(acceptsIncluded ? { acceptsIncluded: true } : {}),
   };
 }
 
@@ -64,6 +66,9 @@ export type WriteShape = {
   attributes: string[];
   requiredAttributes: string[];
   relationships: Record<string, { type: string; many: boolean; required: boolean }>;
+  // The create body takes a top-level 'included' array of new linked items
+  // (e.g. offer code prices), referenced by local ids like '\${p1}'.
+  acceptsIncluded?: boolean;
 };
 
 export const PATHS: Record<string, string[]> = ${JSON.stringify(paths)};
