@@ -212,3 +212,45 @@ test('dot-only ids are refused before any request', async () => {
   await assert.rejects(tool.handler({ action: 'list', parent: 'app', parent_id: '.' }), /Invalid id/);
   assert.equal(calls.length, 0);
 });
+
+test('offer code create sends included prices alongside data', async () => {
+  const { calls, asc } = recorder();
+  const tool = buildFamilyTool(asc, family('asc_subscription_offer_codes'));
+  const included = [{ type: 'subscriptionOfferCodePrices', id: '${p1}', relationships: { territory: { data: { type: 'territories', id: 'USA' } } } }];
+  await tool.handler({
+    action: 'create',
+    attributes: { name: 'Free month', offerMode: 'FREE_TRIAL', duration: 'ONE_MONTH', numberOfPeriods: 1, offerEligibility: 'STACK_WITH_INTRO_OFFERS', customerEligibilities: ['NEW'] },
+    relationships: { subscription: '6757818125', prices: ['${p1}'] },
+    included,
+    confirm: true,
+    reason: 't',
+  });
+  assert.equal(calls[0].path, '/v1/subscriptionOfferCodes');
+  assert.deepEqual(calls[0].body.included, included);
+  assert.deepEqual(calls[0].body.data.relationships.prices, { data: [{ type: 'subscriptionOfferCodePrices', id: '${p1}' }] });
+  assert.deepEqual(calls[0].body.data.relationships.subscription, { data: { type: 'subscriptions', id: '6757818125' } });
+});
+
+test('included is refused where Apple does not accept it, and must be an array', async () => {
+  const { calls, asc } = recorder();
+  const events = buildFamilyTool(asc, family('asc_app_events'));
+  await assert.rejects(
+    events.handler({ action: 'create', attributes: { referenceName: 'x' }, relationships: { app: '1' }, included: [], confirm: true, reason: 't' }),
+    /does not take 'included'/,
+  );
+  const codes = buildFamilyTool(asc, family('asc_subscription_offer_codes'));
+  await assert.rejects(
+    codes.handler({
+      action: 'create',
+      attributes: { name: 'x', offerMode: 'FREE_TRIAL', duration: 'ONE_MONTH', numberOfPeriods: 1, offerEligibility: 'STACK_WITH_INTRO_OFFERS', customerEligibilities: ['NEW'] },
+      relationships: { subscription: '1', prices: ['${p1}'] },
+      included: { type: 'x' },
+      confirm: true,
+      reason: 't',
+    }),
+    /must be an array/,
+  );
+  assert.equal(calls.length, 0);
+  assert.ok('included' in codes.inputSchema.properties);
+  assert.ok(!('included' in events.inputSchema.properties));
+});

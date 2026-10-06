@@ -183,7 +183,8 @@ export const FAMILIES: Family[] = [
   },
   {
     tool: 'asc_subscription_offer_codes',
-    summary: 'Subscription offer codes (redeemable codes; these replace promo codes).',
+    summary:
+      'Subscription offer codes (redeemable codes; these replace promo codes). Free month example: attributes {"name":"Free month","offerMode":"FREE_TRIAL","duration":"ONE_MONTH","numberOfPeriods":1,"offerEligibility":"STACK_WITH_INTRO_OFFERS","customerEligibilities":["NEW"]}, relationships {"subscription":"<id>","prices":["${p1}"]}, included [{"type":"subscriptionOfferCodePrices","id":"${p1}","relationships":{"territory":{"data":{"type":"territories","id":"USA"}}}}]. Then make codes with asc_subscription_offer_code_one_time_codes or asc_subscription_offer_code_custom_codes.',
     base: '/v1/subscriptionOfferCodes',
     parents: { subscription: '/v1/subscriptions/{id}/offerCodes' },
   },
@@ -338,6 +339,9 @@ export function buildFamilyTool(asc: AscHttpClient, f: Family): ToolDef {
   const notes = [f.summary, `Actions: ${actions.join(', ')}.`];
   if (parents.length) notes.push(`list by parent: ${parents.join(', ')} (with parent_id).`);
   if (actions.includes('create')) notes.push(`create ${describeShape(createShape)} (* = required).`);
+  if (actions.includes('create') && createShape?.acceptsIncluded) {
+    notes.push('create also takes included: new linked items such as prices, referenced by local ids.');
+  }
   if (actions.includes('update')) notes.push(`update ${describeShape(updateShape)}.`);
   notes.push('Relationships take ids, e.g. {"app":"123"}. create/update/delete need confirm=true and reason.');
 
@@ -361,6 +365,16 @@ export function buildFamilyTool(asc: AscHttpClient, f: Family): ToolDef {
           additionalProperties: true,
           description: 'Linked items by id, e.g. {"app":"123"} or {"items":["a","b"]} (create, update)',
         },
+        ...(createShape?.acceptsIncluded
+          ? {
+              included: {
+                type: 'array',
+                items: { type: 'object', additionalProperties: true },
+                description:
+                  'New linked items created in the same request (create), e.g. prices. Give each a local id like "${p1}" and list those ids in relationships.',
+              },
+            }
+          : {}),
         query: {
           type: 'object',
           additionalProperties: true,
@@ -405,7 +419,13 @@ export function buildFamilyTool(asc: AscHttpClient, f: Family): ToolDef {
         const type = createShape?.type ?? f.base.split('/').pop()!;
         const data: Record<string, unknown> = { type, attributes };
         if (relationships) data.relationships = relationships;
-        res = await asc.request({ method: 'POST', path: f.base, body: { data } });
+        const body: Record<string, unknown> = { data };
+        if (args.included !== undefined) {
+          if (!createShape?.acceptsIncluded) throw new Error(`create for ${f.tool} does not take 'included'`);
+          if (!Array.isArray(args.included)) throw new Error("'included' must be an array");
+          body.included = args.included;
+        }
+        res = await asc.request({ method: 'POST', path: f.base, body });
       } else if (action === 'update') {
         const id = requireString(args.id, 'id');
         const relationships = updateShape ? buildRelationships(updateShape, relInput) : relInput;

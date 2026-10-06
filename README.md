@@ -88,7 +88,7 @@ node dist/index.js
 
 ### Feature tools (one tool per feature, `action` = list / get / create / update / delete)
 
-Each tool offers only the actions Apple's API has for that feature, and fills in relationship types for you (`relationships: {"app": "123"}`). Writes need `confirm: true` and `reason`. Actions and fields come from `src/spec/asc-spec.ts`, a snapshot of Apple's OpenAPI spec.
+Create calls that Apple lets you send with new linked items (offer code prices, win-back prices, Custom Product Page versions) take an `included` array. Each tool offers only the actions Apple's API has for that feature, and fills in relationship types for you (`relationships: {"app": "123"}`). Writes need `confirm: true` and `reason`. Actions and fields come from `src/spec/asc-spec.ts`, a snapshot of Apple's OpenAPI spec.
 
 - Ratings and Reviews: `asc_customer_reviews`, `asc_customer_review_responses`
 - Custom Product Pages: `asc_custom_product_pages`, `asc_custom_product_page_versions`, `asc_custom_product_page_localizations`
