@@ -77,7 +77,7 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
       const path = requireVersionedPath(requireString(args.path, 'path'));
       if (method !== 'GET') {
         requireWriteConfirm({
-          confirm: Boolean(args.confirm),
+          confirm: args.confirm,
           reason: optionalString(args.reason),
         });
       }
@@ -267,7 +267,7 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
       required: ['app_id', 'platform', 'version_string', 'confirm', 'reason'],
     },
     handler: async (args) => {
-      requireWriteConfirm({ confirm: Boolean(args.confirm), reason: optionalString(args.reason) });
+      requireWriteConfirm({ confirm: args.confirm, reason: optionalString(args.reason) });
       const appId = requireString(args.app_id, 'app_id');
       const platform = requireString(args.platform, 'platform');
       const versionString = requireString(args.version_string, 'version_string');
@@ -297,7 +297,7 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
       required: ['version_id', 'attributes', 'confirm', 'reason'],
     },
     handler: async (args) => {
-      requireWriteConfirm({ confirm: Boolean(args.confirm), reason: optionalString(args.reason) });
+      requireWriteConfirm({ confirm: args.confirm, reason: optionalString(args.reason) });
       const versionId = requireString(args.version_id, 'version_id');
       const attributes = requireObject(args.attributes, 'attributes');
       const body = { data: { type: 'appStoreVersions', id: versionId, attributes } };
@@ -366,7 +366,7 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
       required: ['version_id', 'locale', 'confirm', 'reason'],
     },
     handler: async (args) => {
-      requireWriteConfirm({ confirm: Boolean(args.confirm), reason: optionalString(args.reason) });
+      requireWriteConfirm({ confirm: args.confirm, reason: optionalString(args.reason) });
       const versionId = requireString(args.version_id, 'version_id');
       const locale = requireString(args.locale, 'locale');
       const attributes = args.attributes ? requireObject(args.attributes, 'attributes') : {};
@@ -399,7 +399,7 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
       required: ['localization_id', 'attributes', 'confirm', 'reason'],
     },
     handler: async (args) => {
-      requireWriteConfirm({ confirm: Boolean(args.confirm), reason: optionalString(args.reason) });
+      requireWriteConfirm({ confirm: args.confirm, reason: optionalString(args.reason) });
       const id = requireString(args.localization_id, 'localization_id');
       const attributes = requireObject(args.attributes, 'attributes');
       const body = { data: { type: 'appStoreVersionLocalizations', id, attributes } };
@@ -484,7 +484,7 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
       required: ['build_beta_detail_id', 'attributes', 'confirm', 'reason'],
     },
     handler: async (args) => {
-      requireWriteConfirm({ confirm: Boolean(args.confirm), reason: optionalString(args.reason) });
+      requireWriteConfirm({ confirm: args.confirm, reason: optionalString(args.reason) });
       const id = requireString(args.build_beta_detail_id, 'build_beta_detail_id');
       const attributes = requireObject(args.attributes, 'attributes');
       const body = { data: { type: 'buildBetaDetails', id, attributes } };
@@ -543,7 +543,7 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
       required: ['version_id', 'confirm', 'reason'],
     },
     handler: async (args) => {
-      requireWriteConfirm({ confirm: Boolean(args.confirm), reason: optionalString(args.reason) });
+      requireWriteConfirm({ confirm: args.confirm, reason: optionalString(args.reason) });
       const versionId = requireString(args.version_id, 'version_id');
       // reviewSubmissions has no appStoreVersion relationship. Correct flow:
       // 1) resolve platform + app from the version, 2) create the submission
@@ -601,7 +601,7 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
       required: ['review_submission_id', 'confirm', 'reason'],
     },
     handler: async (args) => {
-      requireWriteConfirm({ confirm: Boolean(args.confirm), reason: optionalString(args.reason) });
+      requireWriteConfirm({ confirm: args.confirm, reason: optionalString(args.reason) });
       const id = requireString(args.review_submission_id, 'review_submission_id');
       // Submitting is a PATCH that sets submitted=true (there is no actions/submit URL).
       const body = { data: { type: 'reviewSubmissions', id, attributes: { submitted: true } } };
@@ -661,7 +661,7 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
       required: ['build_id', 'beta_group_id', 'confirm', 'reason'],
     },
     handler: async (args) => {
-      requireWriteConfirm({ confirm: Boolean(args.confirm), reason: optionalString(args.reason) });
+      requireWriteConfirm({ confirm: args.confirm, reason: optionalString(args.reason) });
       const buildId = requireString(args.build_id, 'build_id');
       const groupId = requireString(args.beta_group_id, 'beta_group_id');
       const body = { data: [{ type: 'builds', id: buildId }] };
@@ -688,7 +688,7 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
       required: ['build_id', 'beta_group_id', 'confirm', 'reason'],
     },
     handler: async (args) => {
-      requireWriteConfirm({ confirm: Boolean(args.confirm), reason: optionalString(args.reason) });
+      requireWriteConfirm({ confirm: args.confirm, reason: optionalString(args.reason) });
       const buildId = requireString(args.build_id, 'build_id');
       const groupId = requireString(args.beta_group_id, 'beta_group_id');
       const body = { data: [{ type: 'builds', id: buildId }] };
@@ -747,7 +747,7 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
       required: ['email', 'confirm', 'reason'],
     },
     handler: async (args) => {
-      requireWriteConfirm({ confirm: Boolean(args.confirm), reason: optionalString(args.reason) });
+      requireWriteConfirm({ confirm: args.confirm, reason: optionalString(args.reason) });
       const email = requireString(args.email, 'email');
       const firstName = optionalString(args.first_name);
       const lastName = optionalString(args.last_name);
@@ -776,7 +776,7 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
       required: ['beta_tester_id', 'beta_group_id', 'confirm', 'reason'],
     },
     handler: async (args) => {
-      requireWriteConfirm({ confirm: Boolean(args.confirm), reason: optionalString(args.reason) });
+      requireWriteConfirm({ confirm: args.confirm, reason: optionalString(args.reason) });
       const testerId = requireString(args.beta_tester_id, 'beta_tester_id');
       const groupId = requireString(args.beta_group_id, 'beta_group_id');
       const body = { data: [{ type: 'betaTesters', id: testerId }] };
@@ -803,7 +803,7 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
       required: ['beta_tester_id', 'beta_group_id', 'confirm', 'reason'],
     },
     handler: async (args) => {
-      requireWriteConfirm({ confirm: Boolean(args.confirm), reason: optionalString(args.reason) });
+      requireWriteConfirm({ confirm: args.confirm, reason: optionalString(args.reason) });
       const testerId = requireString(args.beta_tester_id, 'beta_tester_id');
       const groupId = requireString(args.beta_group_id, 'beta_group_id');
       const body = { data: [{ type: 'betaTesters', id: testerId }] };
@@ -973,7 +973,7 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
       required: ['name', 'udid', 'platform', 'confirm', 'reason'],
     },
     handler: async (args) => {
-      requireWriteConfirm({ confirm: Boolean(args.confirm), reason: optionalString(args.reason) });
+      requireWriteConfirm({ confirm: args.confirm, reason: optionalString(args.reason) });
       const name = requireString(args.name, 'name');
       const udid = requireString(args.udid, 'udid');
       const platform = requireString(args.platform, 'platform');

@@ -70,7 +70,7 @@ export function buildAssetTools(asc: AscHttpClient, fetchImpl: typeof fetch = (.
         required: ['kind', 'file_path', 'parent_id', 'confirm', 'reason'],
       },
       handler: async (args) => {
-        requireWriteConfirm({ confirm: Boolean(args.confirm), reason: optionalString(args.reason) });
+        requireWriteConfirm({ confirm: args.confirm, reason: optionalString(args.reason) });
         const kindName = requireString(args.kind, 'kind');
         const kind = UPLOAD_KINDS[kindName];
         if (!kind) throw new Error(`Unknown kind '${kindName}'. Valid: ${Object.keys(UPLOAD_KINDS).join(', ')}`);

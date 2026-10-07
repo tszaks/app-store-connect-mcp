@@ -9,7 +9,8 @@ export default {
       handle ??= createApiFromEnv();
     } catch (e) {
       // Missing env vars: answer clearly instead of crashing the function.
-      return Response.json({ ok: false, error: `Server not configured: ${e.message}` }, { status: 500 });
+      console.error('app-store-connect-api not configured:', e.message);
+      return Response.json({ ok: false, error: 'Server not configured' }, { status: 500 });
     }
     return handle(request);
   },

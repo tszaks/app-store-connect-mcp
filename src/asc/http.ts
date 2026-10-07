@@ -165,6 +165,9 @@ export class AscHttpClient {
     init: RequestInit,
   ): Promise<Response> {
     const maxAttempts = 5;
+    // A write that hit a 5xx or a dropped connection may already have happened
+    // at Apple, so only GETs retry those. 429 means "not processed" for any method.
+    const idempotent = (init.method ?? 'GET').toUpperCase() === 'GET';
     let attempt = 0;
     let lastErr: unknown;
 
@@ -183,7 +186,7 @@ export class AscHttpClient {
 
         const res = await fetch(url, init);
 
-        if (res.status === 429 || res.status >= 500) {
+        if (res.status === 429 || (idempotent && res.status >= 500)) {
           const waitMs = backoffMs(attempt);
           if (this.debug) console.error('[ASC] retry', { status: res.status, waitMs });
           await sleep(waitMs);
@@ -193,6 +196,7 @@ export class AscHttpClient {
         return res;
       } catch (e) {
         lastErr = e;
+        if (!idempotent) throw e;
         const waitMs = backoffMs(attempt);
         if (this.debug) console.error('[ASC] fetch error retry', { waitMs });
         await sleep(waitMs);

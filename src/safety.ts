@@ -1,8 +1,9 @@
 export function requireWriteConfirm(args: {
-  confirm: boolean;
+  confirm: unknown;
   reason?: string;
 }): void {
-  if (!args.confirm) {
+  // Only the JSON value true counts; "yes", 1, or "true" do not.
+  if (args.confirm !== true) {
     throw new Error("Write requires 'confirm: true'");
   }
   const reason = typeof args.reason === 'string' ? args.reason.trim() : '';

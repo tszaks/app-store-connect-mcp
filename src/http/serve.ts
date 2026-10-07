@@ -9,7 +9,15 @@ const port = Number(process.env.PORT ?? 8787);
 
 createServer(async (req, res) => {
   const chunks: Buffer[] = [];
-  for await (const chunk of req) chunks.push(chunk as Buffer);
+  let size = 0;
+  for await (const chunk of req) {
+    size += (chunk as Buffer).length;
+    if (size > 1_000_000) {
+      res.writeHead(413).end();
+      return;
+    }
+    chunks.push(chunk as Buffer);
+  }
   const body = chunks.length ? Buffer.concat(chunks) : undefined;
   const headers = new Headers();
   for (const [k, v] of Object.entries(req.headers)) if (typeof v === 'string') headers.set(k, v);

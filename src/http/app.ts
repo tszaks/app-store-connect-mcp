@@ -48,8 +48,20 @@ function findToken(tokens: Token[], header: string | null): Token | undefined {
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body, null, 2), { status, headers: { 'content-type': 'application/json' } });
 
-// Every tool refuses a write unless confirm=true, so confirm=true is the write marker.
-const isWrite = (args: Record<string, unknown>) => args.confirm === true;
+const MAX_BODY_BYTES = 1_000_000;
+const READ_ACTIONS = new Set(['list', 'get']);
+const READ_PREFIXES = ['asc_list_', 'asc_get_', 'asc_download_'];
+const READ_TOOLS = new Set(['asc_ping', 'asc_analytics_overview_summary']);
+
+// A read token may only make calls on this allowlist. It does not depend on how
+// each tool checks 'confirm', so a tool bug cannot turn a read token into a writer.
+export function isReadCall(tool: ToolDef, args: Record<string, unknown>): boolean {
+  if ('confirm' in args && args.confirm !== false) return false;
+  const actions = (tool.inputSchema as any)?.properties?.action?.enum;
+  if (Array.isArray(actions)) return typeof args.action === 'string' && READ_ACTIONS.has(args.action);
+  if (tool.name === 'asc_request') return typeof args.method === 'string' && args.method.toUpperCase() === 'GET';
+  return READ_TOOLS.has(tool.name) || READ_PREFIXES.some((p) => tool.name.startsWith(p));
+}
 
 function errorStatus(message: string): number {
   const m = message.match(/^ASC HTTP (\d{3})/);
@@ -132,7 +144,9 @@ export function createApi(
 
     let args: Record<string, unknown>;
     try {
+      if (Number(req.headers.get('content-length') ?? 0) > MAX_BODY_BYTES) throw new Error('body too large');
       const text = await req.text();
+      if (text.length > MAX_BODY_BYTES) throw new Error('body too large');
       const parsed = text ? JSON.parse(text) : {};
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('body must be a JSON object');
       args = parsed as Record<string, unknown>;
@@ -140,12 +154,15 @@ export function createApi(
       return json(400, { ok: false, error: `Invalid JSON body: ${e?.message ?? e}` });
     }
 
-    const write = isWrite(args);
-    if (write && !token.canWrite) {
-      return json(403, { ok: false, error: `Token '${token.label}' is read-only. Writes need a write-enabled token.` });
-    }
-
+    const write = !isReadCall(tool, args);
     const entry = { event: 'write', token: token.label, tool: tool.name, action: args.action ?? args.method ?? null, id: args.id ?? null, reason: args.reason ?? null };
+    if (write && !token.canWrite) {
+      log({ at: new Date().toISOString(), ...entry, ok: false, error: 'denied: read-only token' });
+      return json(403, {
+        ok: false,
+        error: `Token '${token.label}' is read-only. It can only list/get, GET with asc_request, and download. Writes need a write-enabled token.`,
+      });
+    }
     const started = Date.now();
     try {
       const out = await tool.handler(args);

@@ -422,7 +422,7 @@ export function buildAnalyticsTools(asc: AscHttpClient): ToolDef[] {
         required: ['app_id', 'confirm', 'reason'],
       },
       handler: async (args) => {
-        requireWriteConfirm({ confirm: Boolean(args.confirm), reason: optionalString(args.reason) });
+        requireWriteConfirm({ confirm: args.confirm, reason: optionalString(args.reason) });
         const appId = requireString(args.app_id, 'app_id');
         const accessType = requiredAccessType(args.access_type);
         const body = {
