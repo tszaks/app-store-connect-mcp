@@ -305,3 +305,24 @@ test('file tools call the right endpoints with the right formats', async () => {
   await assert.rejects(T.asc_download_offer_code_values.handler({ kind: 'x', one_time_codes_id: 'b1' }), /kind must be/);
   assert.equal(calls.length, 3);
 });
+
+test('generated parent keys name the link and prefer the newest list', async () => {
+  const { autoFamilies } = await import('../dist/tools/resources.js');
+  const a = Object.fromEntries(autoFamilies().map((f) => [f.tool, f]));
+  assert.equal(a.asc_in_app_purchases.parents.app, '/v1/apps/{id}/inAppPurchasesV2');
+  assert.equal(a.asc_app_categories.parents.app_info_primary_category, '/v1/appInfos/{id}/primaryCategory');
+  assert.equal(a.asc_app_categories.parents.app_info, undefined);
+  assert.equal(a.asc_webhooks.parents.app, '/v1/apps/{id}/webhooks');
+});
+
+test('file tools cap huge output and refuse dot-only ids', async () => {
+  const { buildFileTools } = await import('../dist/tools/files.js');
+  const calls = [];
+  const asc = { requestText: async (args) => (calls.push(args), { status: 200, headers: {}, text: 'x'.repeat(150_000), isCompressed: false }) };
+  const T = Object.fromEntries(buildFileTools(asc).map((t) => [t.name, t]));
+  const out = await T.asc_get_performance_data.handler({ kind: 'overview', app_id: '1' });
+  assert.ok(out.length < 101_000);
+  assert.match(out, /truncated: showing 100000 of 150000/);
+  await assert.rejects(T.asc_download_offer_code_values.handler({ kind: 'subscription', one_time_codes_id: '..' }), /Invalid/);
+  assert.equal(calls.length, 1);
+});

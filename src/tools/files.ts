@@ -30,12 +30,26 @@ function previewResult(text: string, full: boolean, lineLimit: number, extra: Re
       ...extra,
       line_count: all.length,
       preview_text: all.slice(0, lineLimit).join('\n'),
-      report_text: full ? text : undefined,
+      report_text: full ? capped(text).text : undefined,
       report_text_included: full,
+      truncated: full && text.length > MAX_CHARS ? `report cut at ${MAX_CHARS} of ${text.length} chars` : undefined,
     },
     null,
     2,
   );
+}
+
+// Keeps one call from flooding an agent's context.
+const MAX_CHARS = 100_000;
+
+function capped(text: string): { text: string; truncated: boolean; total_chars: number } {
+  return { text: text.slice(0, MAX_CHARS), truncated: text.length > MAX_CHARS, total_chars: text.length };
+}
+
+function safeId(value: unknown, field: string): string {
+  const id = requireString(value, field);
+  if (/^\.+$/.test(id)) throw new Error(`Invalid ${field} '${id}'`);
+  return encodeURIComponent(id);
 }
 
 function lineLimitOf(value: unknown): number {
@@ -89,6 +103,7 @@ export function buildFileTools(asc: AscHttpClient): ToolDef[] {
           kind: { type: 'string', enum: ['subscription', 'in_app_purchase'] },
           one_time_codes_id: { type: 'string', description: 'Id of the one-time-use code batch' },
           full_report: { type: 'boolean', description: 'Return every code (default true)' },
+          line_limit: { type: 'number', description: 'Preview lines when full_report is false (default 40).' },
         },
         required: ['kind', 'one_time_codes_id'],
       },
@@ -101,9 +116,9 @@ export function buildFileTools(asc: AscHttpClient): ToolDef[] {
               ? '/v1/inAppPurchaseOfferCodeOneTimeUseCodes'
               : null;
         if (!base) throw new Error("kind must be 'subscription' or 'in_app_purchase'");
-        const id = requireString(args.one_time_codes_id, 'one_time_codes_id');
-        const res = await asc.requestText({ method: 'GET', path: `${base}/${encodeURIComponent(id)}/values`, accept: 'text/csv' });
-        return previewResult(res.text, args.full_report !== false, 20, { kind, one_time_codes_id: id });
+        const id = safeId(args.one_time_codes_id, 'one_time_codes_id');
+        const res = await asc.requestText({ method: 'GET', path: `${base}/${id}/values`, accept: 'text/csv' });
+        return previewResult(res.text, args.full_report !== false, lineLimitOf(args.line_limit), { kind, one_time_codes_id: id });
       },
     },
     {
@@ -133,20 +148,21 @@ export function buildFileTools(asc: AscHttpClient): ToolDef[] {
         if (kind === 'power_metrics') {
           const build = optionalString(args.build_id);
           path = build
-            ? `/v1/builds/${encodeURIComponent(build)}/perfPowerMetrics`
-            : `/v1/apps/${encodeURIComponent(requireString(args.app_id, 'app_id'))}/perfPowerMetrics`;
+            ? `/v1/builds/${safeId(build, 'build_id')}/perfPowerMetrics`
+            : `/v1/apps/${safeId(args.app_id, 'app_id')}/perfPowerMetrics`;
           accept = 'application/vnd.apple.xcode-metrics+json';
         } else if (kind === 'overview') {
-          path = `/v1/apps/${encodeURIComponent(requireString(args.app_id, 'app_id'))}/performanceOverviews`;
+          path = `/v1/apps/${safeId(args.app_id, 'app_id')}/performanceOverviews`;
           accept = 'application/vnd.apple.xcode-overview+json';
         } else if (kind === 'diagnostic_logs') {
-          path = `/v1/diagnosticSignatures/${encodeURIComponent(requireString(args.signature_id, 'signature_id'))}/logs`;
+          path = `/v1/diagnosticSignatures/${safeId(args.signature_id, 'signature_id')}/logs`;
           accept = 'application/vnd.apple.diagnostic-logs+json';
         } else {
           throw new Error("kind must be 'power_metrics', 'overview', or 'diagnostic_logs'");
         }
         const res = await asc.requestText({ method: 'GET', path, accept, query });
-        return res.text;
+        const out = capped(res.text);
+        return out.truncated ? `${out.text}\n\n[truncated: showing ${MAX_CHARS} of ${out.total_chars} chars; narrow with query filters]` : out.text;
       },
     },
   ];

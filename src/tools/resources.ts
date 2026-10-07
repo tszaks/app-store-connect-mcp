@@ -474,13 +474,20 @@ export function autoFamilies(curated: Family[] = FAMILIES): Family[] {
   for (const [type, version] of [...ownVersions].sort(([a], [b]) => a.localeCompare(b))) {
     if (curatedTypes.has(type)) continue;
     const base = `/v${version}/${type}`;
+    // Parent key = parent type, plus the link name when the link is not simply
+    // "all <type> of this parent" (e.g. app_info_primary_category). When Apple
+    // has old and new versions of the same list, the newest wins.
     const parents: Record<string, string> = {};
+    const rank: Record<string, number> = {};
     for (const [path, read] of Object.entries(READS)) {
       if (read.type !== type) continue;
-      const m = /^\/v\d+\/([A-Za-z]+)\/\{id\}\/([A-Za-z0-9]+)$/.exec(path);
+      const m = /^\/v(\d+)\/([A-Za-z]+)\/\{id\}\/([A-Za-z]+?)(?:V(\d+))?$/.exec(path);
       if (!m) continue;
-      let key = snake(singular(m[1]));
-      if (parents[key]) key = `${key}_${snake(m[2])}`;
+      const [, pathVersion, parentType, link, linkVersion] = m;
+      const key = link === type ? snake(singular(parentType)) : `${snake(singular(parentType))}_${snake(link)}`;
+      const r = Number(pathVersion) * 100 + Number(linkVersion ?? 1);
+      if (rank[key] !== undefined && rank[key] >= r) continue;
+      rank[key] = r;
       parents[key] = path;
     }
     families.push({
