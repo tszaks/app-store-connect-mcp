@@ -24,7 +24,7 @@ function setup() {
       headers: token ? { authorization: `Bearer ${token}` } : {},
       body: method === 'GET' ? undefined : body === undefined ? undefined : JSON.stringify(body),
     }));
-  return { call, calls, logs };
+  return { call, calls, logs, api };
 }
 
 test('service info and OpenAPI need no token; OpenAPI lists served tools only', async () => {
@@ -178,4 +178,67 @@ test('read tokens reach exactly this set of non-action tools', async () => {
       "asc_list_version_localizations",
       "asc_ping"
   ]);
+});
+
+// ---- remote MCP endpoint ----
+const mcp = (call, token, method, params, id = 1) =>
+  call('/mcp', {
+    token,
+    headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+    raw: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
+  });
+
+function mcpSetup() {
+  const s = setup();
+  const call = (path, { token, headers = {}, raw } = {}) =>
+    s.api(new Request(`https://x.test${path}`, { method: 'POST', headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...headers }, body: raw }));
+  return { ...s, call };
+}
+
+test('/mcp needs a token and answers 401 with WWW-Authenticate', async () => {
+  const { call } = mcpSetup();
+  const res = await mcp(call, undefined, 'initialize', {});
+  assert.equal(res.status, 401);
+  assert.equal(res.headers.get('www-authenticate'), 'Bearer');
+  assert.equal((await mcp(call, 'x'.repeat(32), 'tools/list', {})).status, 401);
+});
+
+test('/mcp initialize and tools/list', async () => {
+  const { call } = mcpSetup();
+  const init = await mcp(call, READ, 'initialize', { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 't', version: '1' } });
+  assert.equal(init.status, 200);
+  assert.equal((await init.json()).result.serverInfo.name, 'app-store-connect-mcp');
+  const list = await (await mcp(call, READ, 'tools/list', {}, 2)).json();
+  const names = list.result.tools.map((t) => t.name);
+  assert.deepEqual(names, ['asc_customer_reviews', 'asc_get_performance_data', 'asc_request', 'asc_get_fails']);
+  assert.ok(list.result.tools[0].description && list.result.tools[0].inputSchema);
+});
+
+test('/mcp read call works; write with read token is refused without running; write token is logged via mcp', async () => {
+  const { call, calls, logs } = mcpSetup();
+  const read = await (await mcp(call, READ, 'tools/call', { name: 'asc_customer_reviews', arguments: { action: 'list' } })).json();
+  assert.equal(read.result.isError, undefined);
+  assert.equal(read.result.content[0].text, JSON.stringify({ data: [1, 2] }));
+  assert.equal(calls.length, 1);
+
+  const args = { action: 'delete', id: 'r1', confirm: true, reason: 'cleanup' };
+  const denied = await (await mcp(call, READ, 'tools/call', { name: 'asc_customer_reviews', arguments: args }, 3)).json();
+  assert.equal(denied.result.isError, true);
+  assert.match(denied.result.content[0].text, /read-only/);
+  assert.equal(calls.length, 1, 'handler must not run');
+  assert.equal(logs.length, 1);
+  assert.equal(logs[0].ok, false);
+  assert.equal(logs[0].via, 'mcp');
+
+  const ok = await (await mcp(call, WRITE, 'tools/call', { name: 'asc_customer_reviews', arguments: args }, 4)).json();
+  assert.equal(ok.result.isError, undefined);
+  assert.equal(calls.length, 2);
+  assert.equal(logs.length, 2);
+  assert.equal(logs[1].via, 'mcp');
+  assert.equal(logs[1].token, 'admin');
+  assert.equal(logs[1].ok, true);
+
+  const failed = await (await mcp(call, READ, 'tools/call', { name: 'asc_get_fails', arguments: {} }, 5)).json();
+  assert.equal(failed.result.isError, true);
+  assert.match(failed.result.content[0].text, /ASC HTTP 404/);
 });

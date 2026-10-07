@@ -1,3 +1,6 @@
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { createHash, timingSafeEqual } from 'node:crypto';
 
 import { getEnv, getIntEnv, requireEnv, resolvePrivateKey } from '../asc/env.js';
@@ -12,8 +15,9 @@ import { buildTools } from '../tools/tools.js';
 //   GET  /openapi.json   OpenAPI 3.1 description (no token; ?tools=a,b to limit)
 //   GET  /tools          tool names + descriptions (token)
 //   POST /tools/{name}   call a tool; JSON body = the tool's arguments (token)
+//   ANY  /mcp            remote MCP endpoint, Streamable HTTP, stateless (token)
 
-export const VERSION = '0.6.0';
+export const VERSION = '0.7.0';
 
 // Need this Mac (Xcode, local files, Safari), so they are not served.
 export const LOCAL_ONLY = new Set(['asc_upload_build', 'asc_upload_asset', 'asc_prepare_expedite']);
@@ -43,6 +47,48 @@ function findToken(tokens: Token[], header: string | null): Token | undefined {
   if (!m) return undefined;
   const hash = sha256(m[1].trim());
   return tokens.find((t) => timingSafeEqual(t.hash, hash));
+}
+
+const READ_ONLY_MESSAGE = (label: string) =>
+  `Token '${label}' is read-only. It can only list/get, GET with asc_request, and download. Writes need a write-enabled token.`;
+
+type RunOutcome =
+  | { kind: 'denied'; message: string }
+  | { kind: 'ok'; out: string }
+  | { kind: 'error'; message: string };
+
+// The one place a tool call is checked, run, and logged. REST and MCP both use it.
+async function runTool(
+  tool: ToolDef,
+  args: Record<string, unknown>,
+  token: Token,
+  log: WriteLog,
+  via?: 'mcp',
+): Promise<RunOutcome> {
+  const write = !isReadCall(tool, args);
+  const entry = {
+    event: 'write',
+    token: token.label,
+    tool: tool.name,
+    action: args.action ?? args.method ?? null,
+    id: args.id ?? null,
+    reason: args.reason ?? null,
+    ...(via ? { via } : {}),
+  };
+  if (write && !token.canWrite) {
+    log({ at: new Date().toISOString(), ...entry, ok: false, error: 'denied: read-only token' });
+    return { kind: 'denied', message: READ_ONLY_MESSAGE(token.label) };
+  }
+  const started = Date.now();
+  try {
+    const out = await tool.handler(args);
+    if (write) log({ at: new Date().toISOString(), ...entry, ok: true, ms: Date.now() - started });
+    return { kind: 'ok', out };
+  } catch (e: any) {
+    const message = e?.message ?? String(e);
+    if (write) log({ at: new Date().toISOString(), ...entry, ok: false, error: message.slice(0, 300) });
+    return { kind: 'error', message };
+  }
 }
 
 const json = (status: number, body: unknown) =>
@@ -114,12 +160,31 @@ export function createApi(
   const byName = new Map(tools.map((t) => [t.name, t]));
   if (!tokens.length) throw new Error('No API tokens configured (ASC_API_READ_TOKENS / ASC_API_WRITE_TOKENS)');
 
+  // Stateless remote MCP: a fresh server + transport per request, no sessions.
+  const handleMcp = async (req: Request, token: Token): Promise<Response> => {
+    const server = new Server({ name: 'app-store-connect-mcp', version: VERSION }, { capabilities: { tools: {} } });
+    server.setRequestHandler(ListToolsRequestSchema, async () => ({
+      tools: tools.map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema as any })),
+    }));
+    server.setRequestHandler(CallToolRequestSchema, async (r) => {
+      const tool = byName.get(r.params.name);
+      if (!tool) return { content: [{ type: 'text' as const, text: `Unknown tool: ${r.params.name}` }], isError: true };
+      const args = (r.params.arguments ?? {}) as Record<string, unknown>;
+      const outcome = await runTool(tool, args, token, log, 'mcp');
+      if (outcome.kind === 'ok') return { content: [{ type: 'text' as const, text: outcome.out }] };
+      return { content: [{ type: 'text' as const, text: outcome.message }], isError: true };
+    });
+    const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+    await server.connect(transport);
+    return transport.handleRequest(req);
+  };
+
   return async (req) => {
     const url = new URL(req.url);
     const path = url.pathname.replace(/^\/api(?=\/|$)/, '').replace(/\/+$/, '') || '/';
 
     if (req.method === 'GET' && path === '/') {
-      return json(200, { name: 'app-store-connect-api', version: VERSION, tools: tools.length, docs: '/openapi.json' });
+      return json(200, { name: 'app-store-connect-api', version: VERSION, tools: tools.length, docs: '/openapi.json', mcp: '/mcp' });
     }
     if (req.method === 'GET' && path === '/openapi.json') {
       const only = url.searchParams.get('tools');
@@ -128,7 +193,14 @@ export function createApi(
     }
 
     const token = findToken(tokens, req.headers.get('authorization'));
-    if (!token) return json(401, { ok: false, error: 'Missing or wrong token. Send Authorization: Bearer <token>.' });
+    if (!token) {
+      return new Response(
+        JSON.stringify({ ok: false, error: 'Missing or wrong token. Send Authorization: Bearer <token>.' }, null, 2),
+        { status: 401, headers: { 'content-type': 'application/json', 'www-authenticate': 'Bearer' } },
+      );
+    }
+
+    if (path === '/mcp') return handleMcp(req, token);
 
     if (req.method === 'GET' && path === '/tools') {
       return json(200, { ok: true, tools: tools.map((t) => ({ name: t.name, description: t.description })) });
@@ -154,31 +226,16 @@ export function createApi(
       return json(400, { ok: false, error: `Invalid JSON body: ${e?.message ?? e}` });
     }
 
-    const write = !isReadCall(tool, args);
-    const entry = { event: 'write', token: token.label, tool: tool.name, action: args.action ?? args.method ?? null, id: args.id ?? null, reason: args.reason ?? null };
-    if (write && !token.canWrite) {
-      log({ at: new Date().toISOString(), ...entry, ok: false, error: 'denied: read-only token' });
-      return json(403, {
-        ok: false,
-        error: `Token '${token.label}' is read-only. It can only list/get, GET with asc_request, and download. Writes need a write-enabled token.`,
-      });
-    }
-    const started = Date.now();
+    const outcome = await runTool(tool, args, token, log);
+    if (outcome.kind === 'denied') return json(403, { ok: false, error: outcome.message });
+    if (outcome.kind === 'error') return json(errorStatus(outcome.message), { ok: false, error: outcome.message });
+    let result: unknown = outcome.out;
     try {
-      const out = await tool.handler(args);
-      if (write) log({ at: new Date().toISOString(), ...entry, ok: true, ms: Date.now() - started });
-      let result: unknown = out;
-      try {
-        result = JSON.parse(out);
-      } catch {
-        // plain-text tool output (e.g. performance data) stays a string
-      }
-      return json(200, { ok: true, result });
-    } catch (e: any) {
-      const message = e?.message ?? String(e);
-      if (write) log({ at: new Date().toISOString(), ...entry, ok: false, error: message.slice(0, 300) });
-      return json(errorStatus(message), { ok: false, error: message });
+      result = JSON.parse(outcome.out);
+    } catch {
+      // plain-text tool output (e.g. performance data) stays a string
     }
+    return json(200, { ok: true, result });
   };
 }
 

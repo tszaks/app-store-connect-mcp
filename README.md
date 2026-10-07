@@ -133,6 +133,7 @@ The same tools, served as a plain web API (`src/http/app.ts`):
 | `GET /openapi.json` | no | OpenAPI 3.1 description; `?tools=a,b` limits it to some tools |
 | `GET /tools` | yes | tool names and descriptions |
 | `POST /tools/{name}` | yes | call a tool; JSON body = the tool's arguments |
+| `/mcp` | yes | remote MCP endpoint (Streamable HTTP, stateless) |
 
 Auth is `Authorization: Bearer <token>`. Tokens come from env vars, as comma-separated `label:secret` pairs (secret at least 24 characters):
 
@@ -140,6 +141,8 @@ Auth is `Authorization: Bearer <token>`. Tokens come from env vars, as comma-sep
 - `ASC_API_WRITE_TOKENS`: can also write (writes still need `confirm` + `reason`)
 
 Every write is logged as one JSON line (token label, tool, action, id, reason, result). Secrets are never logged. `asc_upload_build`, `asc_upload_asset`, and `asc_prepare_expedite` need this Mac, so they are not served.
+
+To connect a remote MCP client (for example a hosted connector), point it at `https://<host>/mcp` and send the header `Authorization: Bearer <token>`. It serves the same tools with the same rules: a read token can list tools but any write is refused with an error result, and writes by a write token are logged with `via: "mcp"`.
 
 Run locally: `ASC_API_READ_TOKENS=me:<secret> npm run serve` (port 8787). Deploy: the repo is a Vercel project (`api/index.js` + `vercel.json`). Set `ASC_ISSUER_ID`, `ASC_KEY_ID`, `ASC_PRIVATE_KEY` (the .p8 contents), and the token vars in Vercel.
 
