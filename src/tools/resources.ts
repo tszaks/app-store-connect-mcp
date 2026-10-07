@@ -392,7 +392,7 @@ export function buildFamilyTool(asc: AscHttpClient, f: Family): ToolDef {
         throw new Error(`'${action}' is not available for ${f.tool}. Available: ${actions.join(', ')}.${hint}`);
       }
       if (WRITE_ACTIONS.has(action)) {
-        requireWriteConfirm({ confirm: Boolean(args.confirm), reason: optionalString(args.reason) });
+        requireWriteConfirm({ confirm: args.confirm, reason: optionalString(args.reason) });
       }
       const query = asObject(args.query);
       const attributes = asObject(args.attributes) ?? {};

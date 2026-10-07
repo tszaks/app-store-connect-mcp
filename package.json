@@ -1,6 +1,6 @@
 {
   "name": "app-store-connect-mcp",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "App Store Connect MCP server (high coverage + asc_request escape hatch)",
   "type": "module",
   "main": "dist/index.js",
@@ -12,7 +12,8 @@
     "dev": "npx tsc -w -p tsconfig.json",
     "start": "node dist/index.js",
     "test": "npm run build && node --test test/**/*.test.mjs",
-    "typecheck": "npx tsc --noEmit -p tsconfig.json"
+    "typecheck": "npx tsc --noEmit -p tsconfig.json",
+    "serve": "npm run build && node dist/http/serve.js"
   },
   "keywords": [
     "mcp",

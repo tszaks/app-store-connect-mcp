@@ -82,7 +82,7 @@ export function buildUploadTools(): ToolDef[] {
       required: ['ipa_path', 'confirm', 'reason'],
     },
     handler: async (args) => {
-      requireWriteConfirm({ confirm: Boolean(args.confirm), reason: optionalString(args.reason) });
+      requireWriteConfirm({ confirm: args.confirm, reason: optionalString(args.reason) });
 
       const ipaPath = requireString(args.ipa_path, 'ipa_path');
       if (!existsSync(ipaPath)) {

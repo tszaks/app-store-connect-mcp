@@ -123,6 +123,26 @@ npm test
 ```
 
 More can be added via `asc_request` or by adding a row to `FAMILIES` in `src/tools/resources.ts`.
+## Web API (for agents that can only call HTTP)
+
+The same tools, served as a plain web API (`src/http/app.ts`):
+
+| Route | Token | What |
+|---|---|---|
+| `GET /` | no | service info |
+| `GET /openapi.json` | no | OpenAPI 3.1 description; `?tools=a,b` limits it to some tools |
+| `GET /tools` | yes | tool names and descriptions |
+| `POST /tools/{name}` | yes | call a tool; JSON body = the tool's arguments |
+
+Auth is `Authorization: Bearer <token>`. Tokens come from env vars, as comma-separated `label:secret` pairs (secret at least 24 characters):
+
+- `ASC_API_READ_TOKENS`: can read; any call with `"confirm": true` is refused (403)
+- `ASC_API_WRITE_TOKENS`: can also write (writes still need `confirm` + `reason`)
+
+Every write is logged as one JSON line (token label, tool, action, id, reason, result). Secrets are never logged. `asc_upload_build`, `asc_upload_asset`, and `asc_prepare_expedite` need this Mac, so they are not served.
+
+Run locally: `ASC_API_READ_TOKENS=me:<secret> npm run serve` (port 8787). Deploy: the repo is a Vercel project (`api/index.js` + `vercel.json`). Set `ASC_ISSUER_ID`, `ASC_KEY_ID`, `ASC_PRIVATE_KEY` (the .p8 contents), and the token vars in Vercel.
+
 ## Quickstart TL;DR
 
 ```bash
