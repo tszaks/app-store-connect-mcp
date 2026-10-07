@@ -45,11 +45,27 @@ function writeShape(schemaName) {
   };
 }
 
+// GET endpoints that return JSON:API resources: path -> returned type.
+function readShape(op) {
+  const ref = op?.responses?.['200']?.content?.['application/json']?.schema?.$ref;
+  const data = ref && schemas[refName(ref)]?.properties?.data;
+  if (!data) return undefined;
+  const many = data.type === 'array';
+  const item = many ? data.items : data;
+  const type = item?.$ref ? schemas[refName(item.$ref)]?.properties?.type?.enum?.[0] : item?.properties?.type?.enum?.[0];
+  return type ? { type, many } : undefined;
+}
+
 const paths = {};
 const writes = {};
+const reads = {};
 for (const [path, ops] of Object.entries(spec.paths).sort(([a], [b]) => a.localeCompare(b))) {
   const methods = Object.keys(ops).filter((m) => m !== 'parameters').map((m) => m.toUpperCase()).sort();
   paths[path] = methods;
+  if (!path.includes('/relationships/')) {
+    const read = readShape(ops.get);
+    if (read) reads[path] = read;
+  }
   for (const method of ['POST', 'PATCH']) {
     const ref = ops[method.toLowerCase()]?.requestBody?.content?.['application/json']?.schema?.$ref;
     if (!ref) continue;
@@ -74,6 +90,8 @@ export type WriteShape = {
 export const PATHS: Record<string, string[]> = ${JSON.stringify(paths)};
 
 export const WRITES: Record<string, WriteShape> = ${JSON.stringify(writes)};
+
+export const READS: Record<string, { type: string; many: boolean }> = ${JSON.stringify(reads)};
 `;
 writeFileSync(new URL('../src/spec/asc-spec.ts', import.meta.url), out);
-console.log(`spec ${spec.info.version}: ${Object.keys(paths).length} paths, ${Object.keys(writes).length} write shapes`);
+console.log(`spec ${spec.info.version}: ${Object.keys(paths).length} paths, ${Object.keys(writes).length} write shapes, ${Object.keys(reads).length} reads`);

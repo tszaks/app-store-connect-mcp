@@ -7,6 +7,7 @@ import { buildUploadTools } from './upload.js';
 import { buildExpediteTools } from './expedite.js';
 import { buildResourceTools } from './resources.js';
 import { buildAssetTools } from './assets.js';
+import { buildFileTools } from './files.js';
 
 function requireVersionedPath(path: string): string {
   const p = path.startsWith('/') ? path : `/${path}`;
@@ -169,6 +170,7 @@ export function buildTools(asc: AscHttpClient): ToolDef[] {
   tools.push(...buildExpediteTools(asc));
   tools.push(...buildResourceTools(asc));
   tools.push(...buildAssetTools(asc));
+  tools.push(...buildFileTools(asc));
 
   // -----------------------
   // Apps

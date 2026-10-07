@@ -100,6 +100,15 @@ Create calls that Apple lets you send with new linked items (offer code prices, 
 - Screenshots and previews: `asc_screenshot_sets`, `asc_screenshots`, `asc_preview_sets`, `asc_previews`
 - `asc_upload_asset` (gated) — upload a screenshot, preview, event image/video, Asset Library image/video, or IAP/subscription review screenshot (reserve, send parts, confirm with checksum)
 
+### Everything else (generated)
+
+Every other resource type in Apple's spec gets a generated tool named `asc_<type>` (for example `asc_webhooks`, `asc_users`, `asc_sandbox_testers`, `asc_beta_feedback_crash_submissions`, `asc_app_store_version_phased_releases`, `asc_game_center_leaderboards`, `asc_ci_products`). Same `action` interface, same spec checks. They are built at startup from `src/spec/asc-spec.ts`, so regenerating the snapshot picks up new Apple features with no code change.
+
+Endpoints that return files or Apple-specific JSON have dedicated tools:
+- `asc_download_sales_report` — sales, subscription, subscriber, offer code redemption, installs reports
+- `asc_download_offer_code_values` — the actual one-time-use codes (CSV)
+- `asc_get_performance_data` — power/performance metrics, performance overview, diagnostic logs
+
 Not possible through Apple's API: expedited review (see `asc_prepare_expedite`) and app promo codes (use offer codes).
 
 ### Updating the spec snapshot

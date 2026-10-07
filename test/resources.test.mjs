@@ -254,3 +254,75 @@ test('included is refused where Apple does not accept it, and must be an array',
   assert.ok('included' in codes.inputSchema.properties);
   assert.ok(!('included' in events.inputSchema.properties));
 });
+
+test('generated tools cover every remaining resource type with real endpoints', async () => {
+  const { autoFamilies } = await import('../dist/tools/resources.js');
+  const auto = autoFamilies();
+  const curatedTypes = new Set(FAMILIES.map((f) => f.base.split('/')[2]));
+  for (const f of auto) {
+    assert.ok(!curatedTypes.has(f.base.split('/')[2]), `${f.tool} duplicates a curated family`);
+    assert.ok(familyActions(f).length > 0, `${f.tool} has no actions`);
+    for (const path of Object.values(f.parents ?? {})) assert.ok((PATHS[path] ?? []).includes('GET'), `${f.tool}: ${path}`);
+    assert.match(f.tool, /^asc_[a-z0-9_]{1,60}$/);
+  }
+  const names = new Set(auto.map((f) => f.tool));
+  for (const n of ['asc_webhooks', 'asc_sandbox_testers', 'asc_beta_feedback_crash_submissions', 'asc_game_center_leaderboards', 'asc_ci_products', 'asc_app_store_version_phased_releases', 'asc_users']) {
+    assert.ok(names.has(n), `missing ${n}`);
+  }
+  assert.ok(!names.has('asc_sales_reports') && !names.has('asc_finance_reports'), 'file endpoints must not get JSON tools');
+});
+
+test('generated tool lists under a parent and creates with spec relationship types', async () => {
+  const { calls, asc } = recorder();
+  const tool = buildTools(asc).find((t) => t.name === 'asc_webhooks');
+  await tool.handler({ action: 'list', parent: 'app', parent_id: '6756828266' });
+  assert.equal(calls[0].path, '/v1/apps/6756828266/webhooks');
+  const phased = buildTools(asc).find((t) => t.name === 'asc_app_store_version_phased_releases');
+  await phased.handler({ action: 'update', id: 'pr1', attributes: { phasedReleaseState: 'PAUSED' }, confirm: true, reason: 't' });
+  assert.deepEqual(calls[1].body, { data: { type: 'appStoreVersionPhasedReleases', id: 'pr1', attributes: { phasedReleaseState: 'PAUSED' } } });
+});
+
+function textRecorder() {
+  const calls = [];
+  return { calls, asc: { requestText: async (args) => (calls.push(args), { status: 200, headers: {}, text: 'a\tb\n1\t2\n', isCompressed: true }) } };
+}
+
+test('file tools call the right endpoints with the right formats', async () => {
+  const { buildFileTools } = await import('../dist/tools/files.js');
+  const { calls, asc } = textRecorder();
+  const T = Object.fromEntries(buildFileTools(asc).map((t) => [t.name, t]));
+  const sales = JSON.parse(await T.asc_download_sales_report.handler({ vendor_number: '9', report_type: 'SUBSCRIPTION_OFFER_CODE_REDEMPTION', report_sub_type: 'SUMMARY', frequency: 'DAILY' }));
+  assert.equal(calls[0].path, '/salesReports');
+  assert.equal(calls[0].accept, 'application/a-gzip');
+  assert.equal(calls[0].query['filter[reportType]'], 'SUBSCRIPTION_OFFER_CODE_REDEMPTION');
+  assert.equal(sales.line_count, 2);
+  await T.asc_download_offer_code_values.handler({ kind: 'subscription', one_time_codes_id: 'b1' });
+  assert.equal(calls[1].path, '/v1/subscriptionOfferCodeOneTimeUseCodes/b1/values');
+  assert.equal(calls[1].accept, 'text/csv');
+  await T.asc_get_performance_data.handler({ kind: 'power_metrics', build_id: 'bd1' });
+  assert.equal(calls[2].path, '/v1/builds/bd1/perfPowerMetrics');
+  assert.equal(calls[2].accept, 'application/vnd.apple.xcode-metrics+json');
+  await assert.rejects(T.asc_download_offer_code_values.handler({ kind: 'x', one_time_codes_id: 'b1' }), /kind must be/);
+  assert.equal(calls.length, 3);
+});
+
+test('generated parent keys name the link and prefer the newest list', async () => {
+  const { autoFamilies } = await import('../dist/tools/resources.js');
+  const a = Object.fromEntries(autoFamilies().map((f) => [f.tool, f]));
+  assert.equal(a.asc_in_app_purchases.parents.app, '/v1/apps/{id}/inAppPurchasesV2');
+  assert.equal(a.asc_app_categories.parents.app_info_primary_category, '/v1/appInfos/{id}/primaryCategory');
+  assert.equal(a.asc_app_categories.parents.app_info, undefined);
+  assert.equal(a.asc_webhooks.parents.app, '/v1/apps/{id}/webhooks');
+});
+
+test('file tools cap huge output and refuse dot-only ids', async () => {
+  const { buildFileTools } = await import('../dist/tools/files.js');
+  const calls = [];
+  const asc = { requestText: async (args) => (calls.push(args), { status: 200, headers: {}, text: 'x'.repeat(150_000), isCompressed: false }) };
+  const T = Object.fromEntries(buildFileTools(asc).map((t) => [t.name, t]));
+  const out = await T.asc_get_performance_data.handler({ kind: 'overview', app_id: '1' });
+  assert.ok(out.length < 101_000);
+  assert.match(out, /truncated: showing 100000 of 150000/);
+  await assert.rejects(T.asc_download_offer_code_values.handler({ kind: 'subscription', one_time_codes_id: '..' }), /Invalid/);
+  assert.equal(calls.length, 1);
+});
