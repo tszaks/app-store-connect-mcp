@@ -2,7 +2,7 @@ import type { AscHttpClient } from '../asc/http.js';
 import type { ToolDef } from './registry.js';
 import { requireWriteConfirm } from '../safety.js';
 import { optionalString, requireString } from './helpers.js';
-import { PATHS, WRITES, type WriteShape } from '../spec/asc-spec.js';
+import { PATHS, READS, WRITES, type WriteShape } from '../spec/asc-spec.js';
 
 // One tool per App Store Connect feature. Each tool takes an `action`; the
 // actions it offers come from Apple's spec (src/spec/asc-spec.ts), so a tool can
@@ -443,6 +443,56 @@ export function buildFamilyTool(asc: AscHttpClient, f: Family): ToolDef {
   };
 }
 
+const snake = (s: string) =>
+  s
+    .replace(/V(\d)$/, '_v$1')
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .toLowerCase();
+const humanize = (s: string) => {
+  const words = snake(s).replace(/_v\d$/, '').split('_');
+  return [words[0][0].toUpperCase() + words[0].slice(1), ...words.slice(1)].join(' ');
+};
+const singular = (s: string) => (s.endsWith('ies') ? `${s.slice(0, -3)}y` : s.endsWith('s') ? s.slice(0, -1) : s);
+
+// Every other resource type in Apple's spec gets a generated tool, so the
+// whole API has a checked tool, not only the hand-described features above.
+export function autoFamilies(curated: Family[] = FAMILIES): Family[] {
+  const curatedTypes = new Set(curated.map((f) => f.base.split('/')[2]));
+  const ownVersions = new Map<string, number>();
+  for (const path of Object.keys(PATHS)) {
+    const m = /^\/v(\d+)\/([A-Za-z]+)(\/\{id\})?$/.exec(path);
+    if (!m) continue;
+    const [, version, type] = m;
+    // Endpoints that return files instead of JSON:API have dedicated tools.
+    const get = PATHS[path].includes('GET');
+    const writable = PATHS[path].some((x) => x !== 'GET');
+    if (get && !READS[path] && !writable) continue;
+    ownVersions.set(type, Math.max(ownVersions.get(type) ?? 0, Number(version)));
+  }
+
+  const families: Family[] = [];
+  for (const [type, version] of [...ownVersions].sort(([a], [b]) => a.localeCompare(b))) {
+    if (curatedTypes.has(type)) continue;
+    const base = `/v${version}/${type}`;
+    const parents: Record<string, string> = {};
+    for (const [path, read] of Object.entries(READS)) {
+      if (read.type !== type) continue;
+      const m = /^\/v\d+\/([A-Za-z]+)\/\{id\}\/([A-Za-z0-9]+)$/.exec(path);
+      if (!m) continue;
+      let key = snake(singular(m[1]));
+      if (parents[key]) key = `${key}_${snake(m[2])}`;
+      parents[key] = path;
+    }
+    families.push({
+      tool: `asc_${snake(type)}`.slice(0, 64),
+      summary: `${humanize(type)} (${type}; generated from Apple's App Store Connect API spec).`,
+      base,
+      ...(Object.keys(parents).length ? { parents } : {}),
+    });
+  }
+  return families.filter((f) => familyActions(f).length > 0);
+}
+
 export function buildResourceTools(asc: AscHttpClient): ToolDef[] {
-  return FAMILIES.map((f) => buildFamilyTool(asc, f));
+  return [...FAMILIES, ...autoFamilies()].map((f) => buildFamilyTool(asc, f));
 }
