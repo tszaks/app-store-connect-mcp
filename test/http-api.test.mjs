@@ -134,3 +134,48 @@ test('http client retries a GET on 5xx but never retries a write', async () => {
     globalThis.fetch = original;
   }
 });
+
+// If this list changes, check the new tool is truly read-only before updating it:
+// read tokens can call every tool on it.
+test('read tokens reach exactly this set of non-action tools', async () => {
+  const { buildTools } = await import('../dist/tools/tools.js');
+  const { isReadCall } = await import('../dist/http/app.js');
+  const tools = buildTools({ request: async () => ({}) }).filter(
+    (t) => !LOCAL_ONLY.has(t.name) && !Array.isArray(t.inputSchema?.properties?.action?.enum) && t.name !== 'asc_request',
+  );
+  const reachable = tools.filter((t) => isReadCall(t, {})).map((t) => t.name).sort();
+  assert.deepEqual(reachable, [
+      "asc_analytics_overview_summary",
+      "asc_download_analytics_report_instance",
+      "asc_download_finance_report",
+      "asc_download_offer_code_values",
+      "asc_download_sales_report",
+      "asc_get_app",
+      "asc_get_app_store_version",
+      "asc_get_beta_group",
+      "asc_get_build",
+      "asc_get_in_app_purchase",
+      "asc_get_performance_data",
+      "asc_get_review_submission",
+      "asc_get_subscription",
+      "asc_get_version_localization",
+      "asc_list_analytics_report_instances",
+      "asc_list_analytics_report_requests",
+      "asc_list_analytics_reports",
+      "asc_list_app_store_versions",
+      "asc_list_apps",
+      "asc_list_beta_groups",
+      "asc_list_beta_testers",
+      "asc_list_build_beta_details",
+      "asc_list_builds",
+      "asc_list_devices",
+      "asc_list_in_app_purchases",
+      "asc_list_introductory_offers",
+      "asc_list_profiles",
+      "asc_list_review_submissions",
+      "asc_list_subscription_groups",
+      "asc_list_subscriptions",
+      "asc_list_version_localizations",
+      "asc_ping"
+  ]);
+});
