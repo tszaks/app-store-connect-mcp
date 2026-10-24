@@ -1,0 +1,58 @@
+name: Bug report
+description: A tool or the web API does not work as it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Remove ids, tokens, vendor numbers and any key material before you paste anything. If a write went through without `confirm: true` and a `reason`, or a read-only token could write, do not post it here: use the private report link on the issue chooser.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Tool and arguments
+      description: The tool name and the arguments you sent, with ids and secrets removed. Include the full error text.
+      placeholder: |
+        Tool: asc_list_builds
+        Arguments: {"app_id": "<id>"}
+        Error: ASC HTTP 403: ...
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: How are you running it?
+      options:
+        - "Local stdio MCP server"
+        - "Local web API (npm run serve)"
+        - "Hosted web API or remote MCP (Vercel or other)"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "`version` in package.json, or the commit"
+      placeholder: "0.7.0"
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node version and OS
+      placeholder: "Node 22, macOS 26"
+  - type: input
+    id: client
+    attributes:
+      label: MCP client
+      placeholder: "Claude Code, Codex, Claude Desktop, ..."
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
